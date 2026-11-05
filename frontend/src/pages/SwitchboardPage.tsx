@@ -551,9 +551,14 @@ export default function SwitchboardPage() {
                         #{activeCallItem.call.id.slice(0, 8)}
                       </span>
                     </div>
-                    <div className="text-[11px] text-white/50">
-                      Dispute: {(activeCallItem.case.approved_info as any)?.service_provider} &bull; ₹
-                      {(activeCallItem.case.approved_info as any)?.disputed_amount}
+                    <div className="text-[11px] text-white/50 flex items-center gap-1.5 flex-wrap">
+                      <span>Dispute: {(activeCallItem.case.approved_info as any)?.service_provider} &bull; ₹{(activeCallItem.case.approved_info as any)?.disputed_amount}</span>
+                      {Boolean((activeCallItem.case.approved_info as any)?.helpline_number) && (
+                        <>
+                          <span className="text-white/20">&bull;</span>
+                          <span className="text-amber-300 font-mono text-[10.5px]">Helpline: {(activeCallItem.case.approved_info as any)?.helpline_number}</span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

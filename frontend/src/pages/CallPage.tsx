@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  Phone,
   PhoneOff,
   PhoneCall,
   Clock,
@@ -345,9 +346,17 @@ export default function CallPage() {
           </div>
 
           {activeCase && (
-            <span className="text-white/40 text-xs font-mono hidden sm:inline px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.06]">
-              Case #{activeCase.id.slice(0, 8)}
-            </span>
+            <>
+              <span className="text-white/40 text-xs font-mono hidden sm:inline px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                Case #{activeCase.id.slice(0, 8)}
+              </span>
+              {Boolean((caseInfo.helpline_number as string) || (caseInfo.support_number as string)) && (
+                <span className="text-amber-300 text-xs font-mono hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                  <Phone className="w-3 h-3 text-amber-400" />
+                  Dialing: {(caseInfo.helpline_number as string) || (caseInfo.support_number as string)}
+                </span>
+              )}
+            </>
           )}
         </div>
 
@@ -509,6 +518,10 @@ export default function CallPage() {
                   <h3 className="text-white font-bold text-sm">
                     Ringing {provider} Support Desk Switchboard...
                   </h3>
+                  <div className="text-[11px] font-mono text-amber-300/90 flex items-center justify-center gap-1.5 my-1">
+                    <Phone className="w-3 h-3 text-amber-400" />
+                    Target Helpline: <span className="font-bold text-white">{(caseInfo.helpline_number as string) || (caseInfo.support_number as string) || "1800-Auto-Scraped"}</span>
+                  </div>
                   <p className="text-xs text-white/60 max-w-sm mx-auto mt-1 leading-relaxed">
                     Waiting for representative to pick up. Teammate or admin can answer live on the{" "}
                     <a
@@ -750,6 +763,13 @@ export default function CallPage() {
                   <div>
                     <span className="text-white/40 text-[10px] block">Ticket Number</span>
                     <span className="font-mono text-brand-300 font-bold truncate block">{ticketNumber || "Auto-Generated"}</span>
+                  </div>
+                  <div className="col-span-2 pt-1.5 border-t border-white/[0.06] flex items-center justify-between text-xs">
+                    <span className="text-white/40 text-[10px]">Dialed Support Helpline</span>
+                    <span className="font-mono text-amber-300 font-bold text-[11px] flex items-center gap-1">
+                      <Phone className="w-3 h-3 text-amber-400" />
+                      {(caseInfo.helpline_number as string) || (caseInfo.support_number as string) || "1800-Auto-Scraped"}
+                    </span>
                   </div>
                 </div>
               </div>
