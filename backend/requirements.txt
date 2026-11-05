@@ -13,6 +13,7 @@ alembic==1.13.3
 # Pydantic & settings
 pydantic==2.9.2
 pydantic-settings==2.5.2
+email-validator>=2.2.0
 python-dotenv==1.0.1
 
 # HTTP client (Gnani / Sarvam API calls)
