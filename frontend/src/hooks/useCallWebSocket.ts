@@ -113,25 +113,35 @@ export function useCallWebSocket(callId: string | null) {
           break;
 
         case "ivr_speaking": {
+          const text = (event.data.text as string) || "";
           const u: LiveUtterance = {
             id: `ivr-${Date.now()}`,
             speaker: "ivr",
-            text: (event.data.text as string) || "",
+            text,
             isFinal: true,
             sequence: Date.now(),
           };
           appendUtterance(u);
           if (event.data.audio_b64) {
             audioQueue.enqueue(event.data.audio_b64 as string);
+          } else if (typeof window !== "undefined" && "speechSynthesis" in window && !isAudioMuted && text) {
+            try {
+              const utter = new SpeechSynthesisUtterance(text);
+              utter.rate = 1.0;
+              utter.pitch = 1.1;
+              window.speechSynthesis.speak(utter);
+            } catch {}
           }
           break;
         }
 
         case "transcript_final": {
+          const text = (event.data.text as string) || "";
+          const speaker = (event.data.speaker as LiveUtterance["speaker"]) || "user";
           const u: LiveUtterance = {
             id: (event.data.utterance_id as string) || `u-${Date.now()}`,
-            speaker: (event.data.speaker as LiveUtterance["speaker"]) || "user",
-            text: (event.data.text as string) || "",
+            speaker,
+            text,
             isFinal: true,
             latencyMs: event.data.latency_ms as number | undefined,
             sequence: (event.data.sequence as number) || Date.now(),
@@ -139,6 +149,13 @@ export function useCallWebSocket(callId: string | null) {
           appendUtterance(u);
           if (event.data.audio_b64) {
             audioQueue.enqueue(event.data.audio_b64 as string);
+          } else if (typeof window !== "undefined" && "speechSynthesis" in window && !isAudioMuted && text) {
+            try {
+              const utter = new SpeechSynthesisUtterance(text);
+              utter.rate = 1.05;
+              utter.pitch = speaker === "agent" ? 1.05 : 0.95;
+              window.speechSynthesis.speak(utter);
+            } catch {}
           }
           break;
         }

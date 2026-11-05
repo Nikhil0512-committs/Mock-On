@@ -18,11 +18,31 @@ SCENARIOS_DIR = Path(__file__).parent.parent.parent / "scenarios"
 def detect_domain(provider: str, goal: str, explicit_domain: str | None = None) -> str:
     """Intelligently detect consumer dispute domain from provider and goal."""
     if explicit_domain and explicit_domain.lower() in (
-        "ecommerce", "banking", "travel", "telecom", "insurance", "utilities", "other"
+        "ecommerce", "banking", "travel", "telecom", "insurance", "utilities", "edtech", "mobility", "housing", "other"
     ):
         return explicit_domain.lower()
 
     text = f"{provider} {goal}".lower()
+    if any(k in text for k in [
+        "scaler", "upgrad", "coursera", "unacademy", "simplilearn", "course", "batch",
+        "edtech", "student", "tuition", "coaching", "curriculum", "cooling-off", "placement", "fee refund"
+    ]):
+        return "edtech"
+    if any(k in text for k in [
+        "uber", "ola", "rapido", "blusmart", "ather", "cab", "ride", "trip", "crn",
+        "driver", "ev", "scooter", "mobility", "toll"
+    ]):
+        return "mobility"
+    if any(k in text for k in [
+        "nobroker", "stanza", "housing.com", "nestaway", "tenant", "landlord", "pg",
+        "deposit", "security deposit", "rent", "agreement", "brokerage", "society", "maintenance"
+    ]):
+        return "housing"
+    if any(k in text for k in [
+        "tata power", "bses", "adani electricity", "igl", "mgl", "electricity", "gas",
+        "discom", "meter", "reading", "bill revision", "power", "utility", "ca-"
+    ]):
+        return "utilities"
     if any(k in text for k in [
         "amazon", "flipkart", "myntra", "swiggy", "zomato", "blinkit", "zepto",
         "meesho", "nykaa", "order", "delivery", "product", "item", "parcel", "return", "courier"
@@ -408,6 +428,326 @@ class MockIVREngine:
                 {
                     "role": "agent",
                     "text": f"Dhanyawad {provider} mein call karne ke liye. Aapka swasthya shubh rahe.",
+                    "farewell": True,
+                },
+            ]
+
+        elif domain == "utilities":
+            greeting = f"Namaskar, aapka swagat hai {provider} Consumer Grievance aur Electricity/Gas Desk mein. Seva gunwatta ke liye call record ki ja sakti hai."
+            menu_tree = {
+                "root": {
+                    "prompt": "Hindi ke liye 1 dabaen, English ke liye 2 dabaen.",
+                    "options": [
+                        {"key": "1", "label": "Hindi", "next": "main_menu"},
+                        {"key": "2", "label": "English", "next": "main_menu"}
+                    ]
+                },
+                "main_menu": {
+                    "prompt": "Provisional meter reading dispute ke liye 1, Fast meter test ke liye 2, Security deposit refund ke liye 3 dabaen.",
+                    "options": [
+                        {"key": "1", "label": "Provisional meter reading dispute", "next": "hold"},
+                        {"key": "2", "label": "Fast meter testing", "next": "hold"},
+                        {"key": "3", "label": "Security deposit refund", "next": "hold"}
+                    ]
+                }
+            }
+            script = [
+                {
+                    "role": "agent",
+                    "text": f"Namaskar, mera naam Priya hai. Main {provider} Billing desk se baat kar rahi hoon. Main aapki kaise madad kar sakti hoon?",
+                    "is_greeting": True,
+                },
+                {
+                    "role": "user",
+                    "text": f"Haan, mere account par bina meter inspection ke ₹{clean_amt} ka provisional bill excess lagaya gaya hai. Iska bill revision chahiye.",
+                    "intent": "meter_dispute",
+                },
+                {
+                    "role": "agent",
+                    "text": "Ji, main account check kar leti hoon. Kripya apna Consumer Account CA number bataiye.",
+                    "request": "identifier",
+                },
+                {
+                    "role": "user",
+                    "text": f"Mera Consumer CA number hai {identifier_val}.",
+                    "response": "identifier",
+                },
+                {
+                    "role": "agent",
+                    "text": f"Theek hai, maine CA number {identifier_val} verify kiya. System mein actual consumption reading verify ho gayi hai aur ₹{clean_amt} ka excess provisional charge reverse hona approve hua hai.",
+                    "explains": "resolution_reason",
+                },
+                {
+                    "role": "user",
+                    "text": f"Theek hai, toh yeh ₹{clean_amt} kab tak adjust ya refund hoga?",
+                    "dispute": True,
+                },
+                {
+                    "role": "agent",
+                    "text": f"Ji bilkul, maine ₹{clean_amt} ka bill revision order generate kar diya hai. Aapka grievance ticket number hai {ticket_no}. Yeh ₹{clean_amt} ka credit paanch kaam karne wale dinon mein aapke bill ledger account mein adjust kar diya jaega.",
+                    "contains_promise": True,
+                    "promise_type": "refund",
+                    "amount": amount_num,
+                    "deadline": "paanch kaam karne wale din",
+                },
+                {
+                    "role": "user",
+                    "text": f"Theek hai, shukriya. Ticket number {ticket_no} maine note kar liya hai.",
+                    "confirmation": True,
+                },
+                {
+                    "role": "agent",
+                    "text": f"Bilkul, ticket {ticket_no} confirmed hai. Revised electricity bill aapke registered email aur SMS par bhej diya gaya hai.",
+                    "closes": True,
+                },
+                {
+                    "role": "user",
+                    "text": "Dhanyawad.",
+                    "ends": True,
+                },
+                {
+                    "role": "agent",
+                    "text": f"Dhanyawad {provider} Helpline mein sampark karne ke liye. Aapka din shubh ho.",
+                    "farewell": True,
+                },
+            ]
+
+        elif domain == "edtech":
+            greeting = f"Namaskar, aapka swagat hai {provider} Student Support Helpline aur Grievance Cell mein. Behtar seva ke liye call record ki ja sakti hai."
+            menu_tree = {
+                "root": {
+                    "prompt": "Hindi ke liye 1 dabaen, English ke liye 2 dabaen.",
+                    "options": [
+                        {"key": "1", "label": "Hindi", "next": "main_menu"},
+                        {"key": "2", "label": "English", "next": "main_menu"}
+                    ]
+                },
+                "main_menu": {
+                    "prompt": "Course withdrawal aur fee refund ke liye 1, Batch deferral ke liye 2, Placement support ke liye 3 dabaen.",
+                    "options": [
+                        {"key": "1", "label": "Course withdrawal & refund", "next": "hold"},
+                        {"key": "2", "label": "Batch deferral", "next": "hold"},
+                        {"key": "3", "label": "Placement support", "next": "hold"}
+                    ]
+                }
+            }
+            script = [
+                {
+                    "role": "agent",
+                    "text": f"Namaskar, mera naam Priya hai. Main {provider} Academic Support Desk se baat kar rahi hoon. Main aapki kaise madad kar sakti hoon?",
+                    "is_greeting": True,
+                },
+                {
+                    "role": "user",
+                    "text": f"Maine 14-day statutory cooling-off period ke andar course cancel kiya tha, lekin mera ₹{clean_amt} ka course fee refund abhi tak receive nahi hua.",
+                    "intent": "course_refund",
+                },
+                {
+                    "role": "agent",
+                    "text": "Ji bilkul, main admission file check karti hoon. Kripya apna Student ID ya registered mobile number bataiye.",
+                    "request": "identifier",
+                },
+                {
+                    "role": "user",
+                    "text": f"Mera enrollment reference number hai {identifier_val}.",
+                    "response": "identifier",
+                },
+                {
+                    "role": "agent",
+                    "text": f"Maine check kiya. Enrollment {identifier_val} par withdrawal request 14-day window ke andar successfully mark hai, aur refund clearance pending queue mein tha.",
+                    "explains": "resolution_reason",
+                },
+                {
+                    "role": "user",
+                    "text": f"Kripya finance team se mera ₹{clean_amt} turant release karwayein.",
+                    "dispute": True,
+                },
+                {
+                    "role": "agent",
+                    "text": f"Ji bilkul, maine immediate fee waiver aur release approve kar diya hai. Aapka grievance ticket number hai {ticket_no}. Yeh ₹{clean_amt} ka refund aapko paanch kaam karne wale dinon mein aapke original payment bank account mein credit kar diya jaega.",
+                    "contains_promise": True,
+                    "promise_type": "refund",
+                    "amount": amount_num,
+                    "deadline": "paanch kaam karne wale din",
+                },
+                {
+                    "role": "user",
+                    "text": f"Theek hai, shukriya. Ticket number {ticket_no} maine note kar liya hai.",
+                    "confirmation": True,
+                },
+                {
+                    "role": "agent",
+                    "text": f"Ticket {ticket_no} confirmed hai. Saath hi loan auto-debit cancellation clearance bhi generate ho gaya hai.",
+                    "closes": True,
+                },
+                {
+                    "role": "user",
+                    "text": "Dhanyawad.",
+                    "ends": True,
+                },
+                {
+                    "role": "agent",
+                    "text": f"Dhanyawad {provider} mein call karne ke liye. Aapke bhavishya ke liye shubhkamnayein.",
+                    "farewell": True,
+                },
+            ]
+
+        elif domain == "mobility":
+            greeting = f"Namaskar, aapka swagat hai {provider} Rider Support aur Trip Dispute Helpline mein. Suraksha ke liye yeh call record ki ja sakti hai."
+            menu_tree = {
+                "root": {
+                    "prompt": "Hindi ke liye 1 dabaen, English ke liye 2 dabaen.",
+                    "options": [
+                        {"key": "1", "label": "Hindi", "next": "main_menu"},
+                        {"key": "2", "label": "English", "next": "main_menu"}
+                    ]
+                },
+                "main_menu": {
+                    "prompt": "Trip cancellation penalty dispute ke liye 1, EV warranty service ke liye 2, Route toll excess ke liye 3 dabaen.",
+                    "options": [
+                        {"key": "1", "label": "Cancellation penalty dispute", "next": "hold"},
+                        {"key": "2", "label": "EV warranty service", "next": "hold"},
+                        {"key": "3", "label": "Route toll excess", "next": "hold"}
+                    ]
+                }
+            }
+            script = [
+                {
+                    "role": "agent",
+                    "text": f"Namaskar, mera naam Priya hai. Main {provider} Priority Support se baat kar rahi hoon. Main aapki kaise madad kar sakti hoon?",
+                    "is_greeting": True,
+                },
+                {
+                    "role": "user",
+                    "text": f"Driver ne trip par aane se refuse kar diya tha, phir bhi mere account par ₹{clean_amt} ki cancellation penalty debit kar di gayi. Iska refund chahiye.",
+                    "intent": "ride_penalty",
+                },
+                {
+                    "role": "agent",
+                    "text": "Ji, main trip ride log check kar leti hoon. Kripya apna Booking ID ya CRN reference bataiye.",
+                    "request": "identifier",
+                },
+                {
+                    "role": "user",
+                    "text": f"Mera trip CRN number hai {identifier_val}.",
+                    "response": "identifier",
+                },
+                {
+                    "role": "agent",
+                    "text": f"Theek hai, maine CRN {identifier_val} verify kiya. GPS telemetry check karne par verify hua ki driver pickup location par nahi aaya tha aur auto-penalty galat lag gayi thi.",
+                    "explains": "resolution_reason",
+                },
+                {
+                    "role": "user",
+                    "text": f"Theek hai, toh ₹{clean_amt} ka reversal approve karein.",
+                    "dispute": True,
+                },
+                {
+                    "role": "agent",
+                    "text": f"Ji bilkul, maine wrongful cancellation charge reverse kar diya hai. Aapka grievance ticket number hai {ticket_no}. Yeh ₹{clean_amt} ka refund aapko paanch kaam karne wale dinon mein aapke original payment source mein credit kar diya jaega.",
+                    "contains_promise": True,
+                    "promise_type": "refund",
+                    "amount": amount_num,
+                    "deadline": "paanch kaam karne wale din",
+                },
+                {
+                    "role": "user",
+                    "text": f"Theek hai, shukriya. Ticket number {ticket_no} maine note kar liya hai.",
+                    "confirmation": True,
+                },
+                {
+                    "role": "agent",
+                    "text": f"Ticket {ticket_no} registered ho gaya hai aur penalty waiver receipt bhej di gayi hai.",
+                    "closes": True,
+                },
+                {
+                    "role": "user",
+                    "text": "Dhanyawad.",
+                    "ends": True,
+                },
+                {
+                    "role": "agent",
+                    "text": f"Dhanyawad {provider} Helpline mein call karne ke liye. Aapka din shubh ho.",
+                    "farewell": True,
+                },
+            ]
+
+        elif domain == "housing":
+            greeting = f"Namaskar, aapka swagat hai {provider} Tenancy Support aur Rental Dispute Desk mein. Behtar seva ke liye call record ki ja sakti hai."
+            menu_tree = {
+                "root": {
+                    "prompt": "Hindi ke liye 1 dabaen, English ke liye 2 dabaen.",
+                    "options": [
+                        {"key": "1", "label": "Hindi", "next": "main_menu"},
+                        {"key": "2", "label": "English", "next": "main_menu"}
+                    ]
+                },
+                "main_menu": {
+                    "prompt": "Security deposit refund dispute ke liye 1, Tenancy agreement ke liye 2, Society maintenance ke liye 3 dabaen.",
+                    "options": [
+                        {"key": "1", "label": "Security deposit refund", "next": "hold"},
+                        {"key": "2", "label": "Tenancy agreement", "next": "hold"},
+                        {"key": "3", "label": "Maintenance charge dispute", "next": "hold"}
+                    ]
+                }
+            }
+            script = [
+                {
+                    "role": "agent",
+                    "text": f"Namaskar, mera naam Priya hai. Main {provider} Tenancy Grievance desk se baat kar rahi hoon. Main aapki kaise madad kar sakti hoon?",
+                    "is_greeting": True,
+                },
+                {
+                    "role": "user",
+                    "text": f"Flat vacate karne ke baad 30-day statutory notice period poora ho gaya hai, lekin mera ₹{clean_amt} ka security deposit refund abhi tak release nahi kiya gaya.",
+                    "intent": "deposit_refund",
+                },
+                {
+                    "role": "agent",
+                    "text": "Ji, main lease docket check karti hoon. Kripya apna Tenant ID ya agreement reference number bataiye.",
+                    "request": "identifier",
+                },
+                {
+                    "role": "user",
+                    "text": f"Mera agreement reference number hai {identifier_val}.",
+                    "response": "identifier",
+                },
+                {
+                    "role": "agent",
+                    "text": f"Maine check kiya. Reference {identifier_val} par move-out inspection handover sign-off clear hai aur zero property damage recorded hai.",
+                    "explains": "resolution_reason",
+                },
+                {
+                    "role": "user",
+                    "text": f"Toh phir ₹{clean_amt} ka deposit turant release karein.",
+                    "dispute": True,
+                },
+                {
+                    "role": "agent",
+                    "text": f"Ji bilkul, maine escrow disbursement initiate kar di hai. Aapka grievance ticket number hai {ticket_no}. Yeh ₹{clean_amt} ka security deposit refund aapko paanch kaam karne wale dinon mein aapke verified bank account mein credit kar diya jaega.",
+                    "contains_promise": True,
+                    "promise_type": "refund",
+                    "amount": amount_num,
+                    "deadline": "paanch kaam karne wale din",
+                },
+                {
+                    "role": "user",
+                    "text": f"Theek hai, shukriya. Ticket number {ticket_no} maine note kar liya hai.",
+                    "confirmation": True,
+                },
+                {
+                    "role": "agent",
+                    "text": f"Ticket {ticket_no} confirmed hai. Aapko formal NOC aur disbursement receipt email kar di gayi hai.",
+                    "closes": True,
+                },
+                {
+                    "role": "user",
+                    "text": "Dhanyawad.",
+                    "ends": True,
+                },
+                {
+                    "role": "agent",
+                    "text": f"Dhanyawad {provider} Tenancy Helpdesk mein sampark karne ke liye. Aapka din shubh ho.",
                     "farewell": True,
                 },
             ]

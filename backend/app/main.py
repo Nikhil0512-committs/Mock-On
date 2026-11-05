@@ -55,16 +55,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# REST Routers
-app.include_router(auth.router)
-app.include_router(cases.router)
-app.include_router(calls.router)
-app.include_router(promises.router)
-app.include_router(demo.router)
-app.include_router(family.router)
-app.include_router(resolution.router)
-app.include_router(resolution.router, prefix="/api")
-app.include_router(twilio_bridge.router)
+# REST Routers (accessible both at root / and with /api prefix for complete deployment compatibility)
+routers = [auth.router, cases.router, calls.router, promises.router, demo.router, family.router, resolution.router, twilio_bridge.router]
+for r in routers:
+    app.include_router(r)
+    app.include_router(r, prefix="/api")
 
 
 # WebSocket endpoint for live call events

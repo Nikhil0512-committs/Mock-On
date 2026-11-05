@@ -505,16 +505,100 @@ class SarvamExtractor:
 
         # --- HIGH-SPEED DUAL-ENGINE INFERENCE (<50ms Latency, 100% Factual Accuracy) ---
 
+        # Domain-specific statutory and factual mapping
+        domain = str(case_info.get("domain") or "telecom").lower()
+        if domain == "ecommerce":
+            ombudsman_name = "National Consumer Helpline & E-Commerce Redressal Cell"
+            refusal_hindi = "CPA Rules ke mutabik returned product ka refund rokna"
+            refusal_en = "Consumer Protection (E-Commerce) Rules 2020 by withholding refund for returned merchandise"
+            default_prob_hindi = f"{provider} par return verify ho chuka hai lekin Rs {amt} ka refund pending hai."
+            default_prob_en = f"The returned order was received at the warehouse, but the refund of Rs {amt} has not been credited."
+            default_res_hindi = f"{consumer_name} chahte hain ki Rs {amt} ka refund turant original payment method mein transfer ho."
+            default_res_en = f"{consumer_name} requests immediate transfer of the Rs {amt} refund to the original payment source."
+            dispute_nature = "order return refund dispute"
+        elif domain == "banking":
+            ombudsman_name = "RBI Banking Ombudsman"
+            refusal_hindi = "RBI guidelines ke mutabik failed transaction ka T+5 reversal na karna"
+            refusal_en = "RBI Integrated Ombudsman Scheme by failing to reverse failed debit within T+5 days"
+            default_prob_hindi = f"Failed transaction mein account se Rs {amt} debit ho gaye the, aur statutory reversal time nikal gaya hai."
+            default_prob_en = f"Rs {amt} was debited during a failed transaction and has not been credited within the RBI T+5 turnaround window."
+            default_res_hindi = f"{consumer_name} chahte hain ki Rs {amt} ka direct reversal unke account mein turant credit kiya jaye."
+            default_res_en = f"{consumer_name} requests immediate credit reversal of Rs {amt} to the bank account."
+            dispute_nature = "failed transaction reversal dispute"
+        elif domain == "travel":
+            ombudsman_name = "DGCA AirSewa Ombudsman"
+            refusal_hindi = "DGCA passenger charter ke mutabik 7-day cancellation refund na dena"
+            refusal_en = "DGCA Passenger Charter by withholding ticket cancellation refund beyond 7 days"
+            default_prob_hindi = f"Booking cancel hone ke baad bhi Rs {amt} ka cancellation refund statutory limit ke andar nahi mila."
+            default_prob_en = f"Flight booking was cancelled, but the statutory cancellation refund of Rs {amt} has not been processed within 7 days."
+            default_res_hindi = f"{consumer_name} chahte hain ki Rs {amt} ka statutory refund turant release kiya jaye."
+            default_res_en = f"{consumer_name} requests immediate release of the Rs {amt} statutory cancellation refund."
+            dispute_nature = "ticket cancellation refund dispute"
+        elif domain == "insurance":
+            ombudsman_name = "Bima Bharosa Insurance Ombudsman"
+            refusal_hindi = "IRDAI mandate ke mutabik approved claim settlement hold karna"
+            refusal_en = "IRDAI Policyholder Protection Mandate by withholding approved claim disbursement beyond 15 days"
+            default_prob_hindi = f"Approved reimbursement claim par Rs {amt} ka disbursement bina kisi reason ke hold kiya gaya hai."
+            default_prob_en = f"Approved claim disbursement of Rs {amt} has been withheld beyond the statutory IRDAI 15-day timeline."
+            default_res_hindi = f"{consumer_name} chahte hain ki Rs {amt} ka approved claim amount turant account mein transfer ho."
+            default_res_en = f"{consumer_name} requests immediate disbursement of the Rs {amt} claim settlement."
+            dispute_nature = "insurance claim reimbursement dispute"
+        elif domain == "edtech":
+            ombudsman_name = "Consumer Forum & UGC Grievance Cell"
+            refusal_hindi = "statutory 14-day cooling-off window ke andar course fee refund na dena"
+            refusal_en = "Consumer Protection Act statutory 14-day cooling-off withdrawal mandate"
+            default_prob_hindi = f"14 din ke cooling-off period mein enrollment cancel karne ke baad bhi Rs {amt} ki fee wapas nahi ki gayi."
+            default_prob_en = f"Course withdrawal was submitted within the 14-day cooling-off window, but the fee of Rs {amt} is withheld."
+            default_res_hindi = f"{consumer_name} chahte hain ki Rs {amt} ka course fee refund aur loan cancellation turant ho."
+            default_res_en = f"{consumer_name} requests full refund of Rs {amt} and cancellation of the course loan."
+            dispute_nature = "course withdrawal fee refund dispute"
+        elif domain == "mobility":
+            ombudsman_name = "State Transport Authority & Consumer Forum"
+            refusal_hindi = "driver ke refusal par consumer se wrongful penalty debit karna"
+            refusal_en = "Motor Vehicle Aggregator Guidelines against wrongful cancellation penalty imposition"
+            default_prob_hindi = f"Driver ke refuse karne ke baad bhi Rs {amt} ki cancellation penalty wrongfully charge kar li gayi."
+            default_prob_en = f"The trip was cancelled due to driver non-arrival, yet an erroneous cancellation penalty of Rs {amt} was debited."
+            default_res_hindi = f"{consumer_name} chahte hain ki Rs {amt} ki wrongful penalty turant reverse ki jaye."
+            default_res_en = f"{consumer_name} requests immediate reversal and refund of the Rs {amt} cancellation penalty."
+            dispute_nature = "ride cancellation penalty dispute"
+        elif domain == "housing":
+            ombudsman_name = "RERA & Rent Authority"
+            refusal_hindi = "tenancy agreement expiry ke 30 din baad bhi security deposit refund na dena"
+            refusal_en = "Model Tenancy Act by withholding security deposit refund beyond the statutory 30-day limit"
+            default_prob_hindi = f"Flat vacate karne ke baad statutory 30 din beet chuke hain, par Rs {amt} ka deposit release nahi kiya gaya."
+            default_prob_en = f"The tenancy ended with clear move-out sign-off, but the security deposit of Rs {amt} is unlawfully withheld beyond 30 days."
+            default_res_hindi = f"{consumer_name} chahte hain ki Rs {amt} ka security deposit refund turant bank account mein credit ho."
+            default_res_en = f"{consumer_name} requests immediate release of the Rs {amt} security deposit to the bank account."
+            dispute_nature = "rental security deposit refund dispute"
+        elif domain == "utilities":
+            ombudsman_name = "State Electricity / Gas Ombudsman"
+            refusal_hindi = "bina physical meter inspection ke provisional charge lagana"
+            refusal_en = "Electricity Supply Code and Consumer Regulations by billing provisional excess without inspection"
+            default_prob_hindi = f"{provider} ne bina meter inspection ke Rs {amt} ka erratic provisional bill bheja hai, jise reverse hona chahiye."
+            default_prob_en = f"He has been charged an erratic provisional meter reading excess of Rs {amt} without physical meter inspection."
+            default_res_hindi = f"{consumer_name} chahte hain ki bill revise ho aur Rs {amt} ka excess charge turant reverse kiya jaye."
+            default_res_en = f"{consumer_name} requests immediate bill revision and full reversal of the Rs {amt} excess charge."
+            dispute_nature = "utility provisional billing dispute"
+        else:
+            ombudsman_name = "TRAI Telecom Appellate / Consumer Forum"
+            refusal_hindi = "unauthorized billing charge lagana"
+            refusal_en = "Telecom Consumer Protection Regulations"
+            default_prob_hindi = f"Account par bina authorization ke Rs {amt} ka billing charge lagaya gaya hai."
+            default_prob_en = f"He has been charged an unauthorized deduction of Rs {amt} without consent."
+            default_res_hindi = f"{consumer_name} chahte hain ki Rs {amt} ka waiver aur credit refund turant mile."
+            default_res_en = f"{consumer_name} requests immediate waiver and refund of Rs {amt}."
+            dispute_nature = "billing dispute"
+
         # 1. Refusal turn: instant statutory Ombudsman escalation warning
         if is_refusal:
             if is_hindi:
                 return (
-                    f"Aapka refusal note kar liya gaya hai. Bina meter inspection ke provisional charge lagana "
-                    f"consumer regulations ka violation hai, aur hum ise Electricity Ombudsman ko escalate kar rahe hain."
+                    f"Aapka refusal note kar liya gaya hai. {refusal_hindi} "
+                    f"consumer regulations ka violation hai, aur hum ise {ombudsman_name} ko escalate kar rahe hain."
                 )
             return (
-                f"Your refusal has been recorded. Imposing provisional charges without inspection violates statutory "
-                f"consumer protection rules, and this docket is entered into evidence for Ombudsman escalation."
+                f"Your refusal has been recorded. Violating {refusal_en} is a serious regulatory breach, "
+                f"and this docket is entered into evidence for escalation to the {ombudsman_name}."
             )
 
         # 2. Commitment turn: instant confirmation
@@ -541,12 +625,12 @@ class SarvamExtractor:
             if is_hindi:
                 return (
                     f"Namaste, main {consumer_name} ka AI personal assistant bol raha hoon. "
-                    f"Yeh call unke {provider} bill dispute ke regarding hai. "
+                    f"Yeh call unke {provider} {dispute_nature} ke regarding hai. "
                     f"Hum Hindi ya English kisi mein bhi baat kar sakte hain."
                 )
             return (
                 f"Hello, I am {consumer_name}'s AI personal assistant. "
-                f"I am calling regarding help with his {provider} bill dispute. "
+                f"I am calling regarding {consumer_name}'s {provider} {dispute_nature}. "
                 f"English or Hindi works great, thank you."
             )
 
@@ -589,17 +673,19 @@ class SarvamExtractor:
                 f"Please log the refund confirmation on this docket #{ticket} right now rather than deferring to another call."
             )
 
-        # 4. Account / CA Number (Strict word boundaries so "can", "case", "call" NEVER match CA)
-        is_acc_req = bool(re.search(r"\b(ca|ca\s*no|ca\s*number|consumer\s*account|account\s*number|account\s*no|consumer\s*id|customer\s*id|khata\s*no|khata\s*number|khata)\b", lower_rep))
+        # 4. Identifier (CA / Account / Order / PNR / Policy / Claim / Student / Tenant / CRN)
+        is_acc_req = bool(re.search(
+            r"\b(ca|ca\s*no|ca\s*number|consumer\s*account|account\s*number|account\s*no|consumer\s*id|customer\s*id|khata\s*no|khata\s*number|khata|order|order\s*id|pnr|booking\s*id|policy|policy\s*number|policy\s*no|claim|claim\s*id|claim\s*number|student\s*id|enrollment|crn|trip\s*id|tenant\s*id|agreement\s*ref|tracking|identifier)\b",
+            lower_rep
+        ))
         if is_acc_req:
-            # If advocate already just supplied this account number in the previous turn, do not loop
             if id_val.lower() in last_advocate_text.lower():
                 if is_hindi:
-                    return f"Ji, account number {id_val} hai. Kripya system mein Rs {amt} ka disputed excess check karein."
-                return f"Yes, account number is {id_val}. Please check the system for the Rs {amt} disputed charge."
+                    return f"Ji, {id_type} {id_val} hai. Kripya system mein Rs {amt} ka dispute check karein."
+                return f"Yes, {id_type} is {id_val}. Please check the system for the Rs {amt} dispute."
             if is_hindi:
-                return f"Unka consumer account number {id_val} hai."
-            return f"His consumer account number is {id_val}."
+                return f"Unka {id_type} {id_val} hai."
+            return f"His {id_type} is {id_val}."
 
         # 5. Ticket / Complaint Docket Reference
         is_ticket_req = bool(re.search(r"\b(ticket|ticket\s*number|complaint|complaint\s*number|docket|reference|sr\s*number)\b", lower_rep))
@@ -619,7 +705,7 @@ class SarvamExtractor:
         is_amt_req = bool(re.search(r"\b(amount|disputed\s*amount|kitna|paise|rupaye|how\s*much|charges|refund\s*amount)\b", lower_rep))
         if is_amt_req:
             if is_hindi:
-                return f"Disputed provisional billing amount Rs {amt} hai."
+                return f"Disputed amount Rs {amt} hai."
             return f"The disputed amount is Rs {amt}."
 
         # 8. Operator Acknowledging or Reviewing Docket ("I can see the dispute", "checking", "looking into")
@@ -627,21 +713,21 @@ class SarvamExtractor:
         if is_ack:
             if is_hindi:
                 return f"Ji representative ji, kripya details verify karein aur Rs {amt} ka reversal confirm karein."
-            return f"Thank you representative. Please verify the billing details and confirm the reversal of Rs {amt}."
+            return f"Thank you representative. Please verify the details and confirm the reversal of Rs {amt}."
 
         # 9. Problem / Issue explanation
         is_prob_req = bool(re.search(r"\b(problem|dikkat|issue|pareshani|kya\s+hua|explain|what\s+happened|reason\s+for\s+call)\b", lower_rep))
         if is_prob_req:
             if is_hindi:
-                return f"{provider} ne bina meter inspection ke Rs {amt} ka erratic provisional bill bheja hai, jise unhe reverse karna chahiye."
-            return f"He has been charged an erratic provisional meter reading excess of Rs {amt} without physical meter inspection."
+                return default_prob_hindi
+            return default_prob_en
 
         # 10. Desired resolution
         is_res_req = bool(re.search(r"\b(resolution|want|chahte|samadhan|solution|settlement)\b", lower_rep))
         if is_res_req:
             if is_hindi:
-                return f"{consumer_name} chahte hain ki bill revise ho aur Rs {amt} ka excess charge turant reverse kiya jaye."
-            return f"{consumer_name} requests immediate bill revision and full reversal of the Rs {amt} excess charge."
+                return default_res_hindi
+            return default_res_en
 
         # For nuanced / conversational turns, query Sarvam LLM via persistent pooled connection
         try:

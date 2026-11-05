@@ -79,10 +79,22 @@ export default function CallPage() {
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
 
+  const silenceTimerRef = useRef<any>(null);
+
   const toggleMic = () => {
     if (isListening) {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       recognitionRef.current?.stop();
       setIsListening(false);
+      if (userMessageInput.trim() && activeCall) {
+        const text = userMessageInput.trim();
+        setUserMessageInput("");
+        callsApi.sendCallMessage(activeCall.id, {
+          speaker: "user",
+          text,
+          auto_advocate_reply: false,
+        }).catch(() => {});
+      }
       return;
     }
 
@@ -100,10 +112,29 @@ export default function CallPage() {
       recognition.lang = "en-IN";
 
       recognition.onresult = (event: any) => {
-        const text = Array.from(event.results)
-          .map((r: any) => (r as any)[0].transcript)
-          .join("");
+        let text = "";
+        let isFinal = false;
+        for (let i = 0; i < event.results.length; ++i) {
+          text += event.results[i][0].transcript;
+          if (event.results[i].isFinal) isFinal = true;
+        }
         setUserMessageInput(text);
+
+        if (text.trim() && activeCall) {
+          if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+          const delay = isFinal ? 400 : 1400;
+          silenceTimerRef.current = setTimeout(() => {
+            const candidate = text.trim();
+            if (candidate && activeCall) {
+              setUserMessageInput("");
+              callsApi.sendCallMessage(activeCall.id, {
+                speaker: "user",
+                text: candidate,
+                auto_advocate_reply: false,
+              }).catch(() => {});
+            }
+          }, delay);
+        }
       };
 
       recognition.onerror = () => {
