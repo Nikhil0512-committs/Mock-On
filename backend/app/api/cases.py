@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pydantic import BaseModel
 from app.config import settings
 from app.database import get_db
 from app.models import Case, User
@@ -14,6 +15,27 @@ from app.schemas.case import CaseCreate, CaseRead, CaseUpdate
 from app.services.auth import get_optional_current_user
 
 router = APIRouter(prefix="/cases", tags=["cases"])
+
+
+class EnhanceGrievancePayload(BaseModel):
+    raw_text: str
+    domain: Optional[str] = "telecom"
+    provider: Optional[str] = "Customer Support"
+    amount: Optional[str] = ""
+    identifier: Optional[str] = ""
+
+
+@router.post("/enhance_grievance")
+async def enhance_grievance_endpoint(payload: EnhanceGrievancePayload):
+    from app.services.sarvam import sarvam_extractor
+    res = await sarvam_extractor.enhance_grievance(
+        raw_text=payload.raw_text,
+        domain=payload.domain or "telecom",
+        provider=payload.provider or "Customer Support",
+        amount=payload.amount or "",
+        identifier=payload.identifier or "",
+    )
+    return res
 
 
 @router.post("", response_model=CaseRead, status_code=201)

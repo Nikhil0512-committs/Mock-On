@@ -146,6 +146,7 @@ export interface LiveUtterance {
   id: string;
   speaker: SpeakerRole;
   text: string;
+  thought_process?: string;
   isFinal: boolean;
   latencyMs?: number;
   sequence: number;

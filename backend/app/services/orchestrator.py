@@ -166,11 +166,25 @@ class CallOrchestrator:
                 except Exception as e:
                     logger.warning(f"TTS synthesis failed for turn: {e}")
 
+            thought_process = None
+            if role == "user":
+                if turn.get("intent"):
+                    thought_process = "Autonomous Strategy: Presenting factual dispute briefing. Demanding full monetary restitution under statutory turnaround rules."
+                elif turn.get("response") == "identifier":
+                    thought_process = "Autonomous Strategy: Submitting verified docket reference identifier for customer care verification."
+                elif turn.get("dispute"):
+                    thought_process = "Autonomous Strategy: Rejecting procedural delay; demanding immediate payment reversal to original source."
+                elif turn.get("confirmation"):
+                    thought_process = "Autonomous Strategy: Verified statutory commitment. Locking ticket reference and binding SLA turnaround into immutable audit ledger."
+                else:
+                    thought_process = "Autonomous Strategy: Concluding dispute session with representative."
+
             await asyncio.sleep(0.5)  # Simulate speech duration
             await self._emit("transcript_final", {
                 "utterance_id": utterance_id,
                 "speaker": role,
                 "text": text,
+                "thought_process": thought_process,
                 "sequence": self.sequence_counter,
                 "audio_b64": audio_b64,
             })

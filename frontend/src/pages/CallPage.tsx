@@ -29,12 +29,14 @@ import {
   MicOff,
   ShieldAlert,
   Zap,
+  Brain,
 } from "lucide-react";
 import { useStore } from "../store";
 import { useCallWebSocket } from "../hooks/useCallWebSocket";
 import { callsApi, casesApi, promisesApi } from "../lib/api";
 import ShareFamilyModal from "../components/ShareFamilyModal";
 import CallSummaryModal from "../components/CallSummaryModal";
+import AudioWaveformVisualizer from "../components/AudioWaveformVisualizer";
 import type { SpeakerRole } from "../types";
 
 function SpeakerChip({ role }: { role: SpeakerRole }) {
@@ -418,6 +420,17 @@ export default function CallPage() {
       <div className="flex flex-1 overflow-hidden">
         {/* Left Column: Real-Time Audio Transcript (65%) */}
         <main className="flex-1 flex flex-col overflow-hidden bg-[#070c18] relative">
+          {/* Live Telephony Waveform & Frequency Visualizer */}
+          <AudioWaveformVisualizer
+            callStatus={callStatus}
+            isOnHold={isOnHold}
+            activeSpeaker={utterances.length > 0 ? utterances[utterances.length - 1].speaker : null}
+            isMuted={isAudioMuted}
+            onToggleMute={() => setIsAudioMuted(!isAudioMuted)}
+            provider={provider}
+            helplineNumber={(caseInfo.helpline_number as string) || (caseInfo.support_number as string)}
+          />
+
           {callStatus === "ended" && (
             isCallResolved ? (
               <div className="bg-gradient-to-r from-brand-950/70 to-indigo-950/70 border-b border-brand-500/30 px-6 py-2.5 flex items-center justify-between gap-4 animate-fade-in flex-shrink-0">
@@ -567,7 +580,7 @@ export default function CallPage() {
                   <SpeakerChip role={u.speaker} />
                 </div>
                 <div
-                  className={`max-w-[75%] rounded-2xl px-4 py-3 text-xs sm:text-sm leading-relaxed shadow-lg ${
+                  className={`max-w-[78%] rounded-2xl px-4 py-3 text-xs sm:text-sm leading-relaxed shadow-lg ${
                     u.speaker === "agent"
                       ? "bg-[#181124] border border-rose-500/30 text-slate-100 shadow-black/40"
                       : u.speaker === "user"
@@ -577,7 +590,20 @@ export default function CallPage() {
                       : "bg-white/[0.04] border border-white/[0.08] text-white/50 text-xs"
                   }`}
                 >
-                  {u.text}
+                  {/* AI Advocate Statutory CoT Reasoning */}
+                  {u.speaker === "user" && u.thought_process && (
+                    <div className="mb-2.5 p-2.5 rounded-xl bg-purple-950/50 border border-purple-500/30 text-purple-200 text-xs shadow-inner">
+                      <div className="flex items-center gap-1.5 font-bold text-purple-300 uppercase tracking-wider text-[10px] mb-1">
+                        <Brain className="w-3.5 h-3.5 text-purple-400 animate-pulse flex-shrink-0" />
+                        <span>AI Advocate Statutory Strategy (CoT)</span>
+                      </div>
+                      <p className="font-mono text-[11px] leading-relaxed text-purple-100/90">
+                        {u.thought_process}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="leading-relaxed">{u.text}</div>
                   {u.latencyMs && (
                     <div className="text-white/30 text-[10px] font-mono mt-1 text-right">
                       {u.latencyMs}ms

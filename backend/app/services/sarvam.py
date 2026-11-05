@@ -412,7 +412,7 @@ class SarvamExtractor:
         rep_latest_text: str,
         is_refusal: bool = False,
         promise_detected: bool = False,
-    ) -> str:
+    ) -> tuple[str, str]:
         """
         Dynamically generates intelligent, legally-grounded, spoken AI Advocate responses
         to the company representative's statements or questions during the live switchboard call,
@@ -591,87 +591,124 @@ class SarvamExtractor:
 
         # 1. Refusal turn: instant statutory Ombudsman escalation warning
         if is_refusal:
+            thought = (
+                f"Statutory Strategy: Representative rejected settlement. Cross-referencing {refusal_en}. "
+                f"Entering refusal into formal evidentiary record for escalation to {ombudsman_name}."
+            )
             if is_hindi:
-                return (
+                spoken = (
                     f"Aapka refusal note kar liya gaya hai. {refusal_hindi} "
                     f"consumer regulations ka violation hai, aur hum ise {ombudsman_name} ko escalate kar rahe hain."
                 )
-            return (
-                f"Your refusal has been recorded. Violating {refusal_en} is a serious regulatory breach, "
-                f"and this docket is entered into evidence for escalation to the {ombudsman_name}."
-            )
+            else:
+                spoken = (
+                    f"Your refusal has been recorded. Violating {refusal_en} is a serious regulatory breach, "
+                    f"and this docket is entered into evidence for escalation to the {ombudsman_name}."
+                )
+            return spoken, thought
 
         # 2. Commitment turn: instant confirmation
         if promise_detected:
+            thought = (
+                f"Statutory Strategy: Binding commitment verified for Rs {amt}. Confirming concrete terms "
+                f"and locking quote into immutable ledger."
+            )
             if is_hindi:
-                return f"Shukriya representative ji. Humne aapka Rs {amt} settlement ka commitment ledger par record kar liya hai."
-            return f"Thank you representative. We have officially recorded your commitment for Rs {amt} on the ledger."
+                spoken = f"Shukriya representative ji. Humne aapka Rs {amt} settlement ka commitment ledger par record kar liya hai."
+            else:
+                spoken = f"Thank you representative. We have officially recorded your commitment for Rs {amt} on the ledger."
+            return spoken, thought
 
         # 3. Opening turn: instant 100% accurate introduction
         if is_opening:
+            thought = (
+                f"Statutory Strategy: Initiating telephony representation with {provider}. Introducing AI Personal "
+                f"Assistant for consumer {consumer_name} regarding {dispute_nature}."
+            )
             if is_follow_up:
                 if is_hindi:
-                    return (
+                    spoken = (
                         f"Namaste, main {consumer_name} ka AI personal assistant bol raha hoon. "
                         f"Yeh call overdue Ticket #{ticket} ke follow-up ke regarding hai. "
                         f"Rs {amt} ka refund deadline nikalne ke baad bhi receive nahi hua hai. "
                         f"Hum Hindi ya English kisi mein bhi baat kar sakte hain."
                     )
-                return (
-                    f"Hello, I am {consumer_name}'s AI personal assistant. "
-                    f"I am calling to follow up on overdue Ticket #{ticket}. "
-                    f"The promised refund of Rs {amt} was not received past the agreed deadline, and we require immediate settlement."
-                )
-            if is_hindi:
-                return (
+                else:
+                    spoken = (
+                        f"Hello, I am {consumer_name}'s AI personal assistant. "
+                        f"I am calling to follow up on overdue Ticket #{ticket}. "
+                        f"The promised refund of Rs {amt} was not received past the agreed deadline, and we require immediate settlement."
+                    )
+            elif is_hindi:
+                spoken = (
                     f"Namaste, main {consumer_name} ka AI personal assistant bol raha hoon. "
                     f"Yeh call unke {provider} {dispute_nature} ke regarding hai. "
                     f"Hum Hindi ya English kisi mein bhi baat kar sakte hain."
                 )
-            return (
-                f"Hello, I am {consumer_name}'s AI personal assistant. "
-                f"I am calling regarding {consumer_name}'s {provider} {dispute_nature}. "
-                f"English or Hindi works great, thank you."
-            )
+            else:
+                spoken = (
+                    f"Hello, I am {consumer_name}'s AI personal assistant. "
+                    f"I am calling regarding {consumer_name}'s {provider} {dispute_nature}. "
+                    f"English or Hindi works great, thank you."
+                )
+            return spoken, thought
 
         # 3.1 Statutory Counter-Negotiator: Coupon / Store credit diversion refusal
         evasion_analysis = self.analyze_evasion_and_tactics(rep_latest_text, domain=case_info.get("domain", "telecom"))
         tactic = evasion_analysis["tactic"]
 
         if tactic == "coupon_diversion":
+            thought = (
+                f"Statutory Strategy: Tactic detected — Coupon Diversion. Under CPA 2019 Section 2(47), forced wallet credits "
+                f"for monetary claims is an unfair trade practice. Insisting on direct cash refund of Rs {amt} to original source."
+            )
             if is_hindi:
-                return (
+                spoken = (
                     f"Representative ji, Consumer Protection Act ke Section 2(47) ke mutabik unauthorized charges ke badle "
                     f"coupon ya wallet points dena unfair trade practice hai. Consumer {consumer_name} ko seedhe unke original "
                     f"payment source mein Rs {amt} ka direct refund chahiye."
                 )
-            return (
-                f"Representative, under Section 2(47) of the Consumer Protection Act 2019, unauthorized service deductions "
-                f"cannot be settled with restricted promotional coupons or wallet credits. Consumer {consumer_name} explicitly "
-                f"demands a direct refund of Rs {amt} to his original payment source within statutory timelines."
-            )
+            else:
+                spoken = (
+                    f"Representative, under Section 2(47) of the Consumer Protection Act 2019, unauthorized service deductions "
+                    f"cannot be settled with restricted promotional coupons or wallet credits. Consumer {consumer_name} explicitly "
+                    f"demands a direct refund of Rs {amt} to his original payment source within statutory timelines."
+                )
+            return spoken, thought
 
         if tactic == "vague_hedging":
+            thought = (
+                f"Statutory Strategy: Tactic detected — Vague Hedging. Non-committal deflection violates citizen charter turnaround rules. "
+                f"Pressing representative for an exact binding turnaround date."
+            )
             if is_hindi:
-                return (
+                spoken = (
                     f"Representative ji, 'try karenge' kehna statutory SLA compliance nahi hai. Kripya ek firm timeline confirm "
                     f"karein: kya yeh Rs {amt} agle 3 se 5 business days mein credit hoga, haan ya na?"
                 )
-            return (
-                f"Representative, vague assurances do not meet regulatory compliance. Under statutory turnaround mandates, "
-                f"we require a firm commitment: will this Rs {amt} refund be credited within 3 to 5 business days, yes or no?"
-            )
+            else:
+                spoken = (
+                    f"Representative, vague assurances do not meet regulatory compliance. Under statutory turnaround mandates, "
+                    f"we require a firm commitment: will this Rs {amt} refund be credited within 3 to 5 business days, yes or no?"
+                )
+            return spoken, thought
 
         if tactic == "procedural_stalling":
+            thought = (
+                f"Statutory Strategy: Tactic detected — Procedural Stalling. Representative attempting to defer consumer. "
+                f"Enforcing Citizen Charter Turnaround Mandate — refusing deferral and insisting on resolution under active docket #{ticket}."
+            )
             if is_hindi:
-                return (
+                spoken = (
                     f"Representative ji, consumer {consumer_name} pehle hi kafi wait kar chuke hain. Kripya kisi doosre call par "
                     f"talne ke bajaye abhi isi docket #{ticket} par Rs {amt} ka refund confirmation confirm karein."
                 )
-            return (
-                f"Representative, consumer {consumer_name} has already waited past reasonable turnaround time. "
-                f"Please log the refund confirmation on this docket #{ticket} right now rather than deferring to another call."
-            )
+            else:
+                spoken = (
+                    f"Representative, consumer {consumer_name} has already waited past reasonable turnaround time. "
+                    f"Please log the refund confirmation on this docket #{ticket} right now rather than deferring to another call."
+                )
+            return spoken, thought
 
         # 4. Identifier (CA / Account / Order / PNR / Policy / Claim / Student / Tenant / CRN)
         is_acc_req = bool(re.search(
@@ -679,57 +716,75 @@ class SarvamExtractor:
             lower_rep
         ))
         if is_acc_req:
+            thought = f"Statutory Strategy: Representative requested account verification. Supplying verified {id_type} '{id_val}'."
             if id_val.lower() in last_advocate_text.lower():
                 if is_hindi:
-                    return f"Ji, {id_type} {id_val} hai. Kripya system mein Rs {amt} ka dispute check karein."
-                return f"Yes, {id_type} is {id_val}. Please check the system for the Rs {amt} dispute."
-            if is_hindi:
-                return f"Unka {id_type} {id_val} hai."
-            return f"His {id_type} is {id_val}."
+                    spoken = f"Ji, {id_type} {id_val} hai. Kripya system mein Rs {amt} ka dispute check karein."
+                else:
+                    spoken = f"Yes, {id_type} is {id_val}. Please check the system for the Rs {amt} dispute."
+            else:
+                if is_hindi:
+                    spoken = f"Unka {id_type} {id_val} hai."
+                else:
+                    spoken = f"His {id_type} is {id_val}."
+            return spoken, thought
 
         # 5. Ticket / Complaint Docket Reference
         is_ticket_req = bool(re.search(r"\b(ticket|ticket\s*number|complaint|complaint\s*number|docket|reference|sr\s*number)\b", lower_rep))
         if is_ticket_req:
+            thought = f"Statutory Strategy: Representative requested complaint ticket. Providing formal docket #{ticket}."
             if is_hindi:
-                return f"Is dispute ka registered ticket reference number #{ticket} hai."
-            return f"The complaint ticket reference is #{ticket}."
+                spoken = f"Is dispute ka registered ticket reference number #{ticket} hai."
+            else:
+                spoken = f"The complaint ticket reference is #{ticket}."
+            return spoken, thought
 
         # 6. Mobile / Phone number
         is_phone_req = bool(re.search(r"\b(phone|phone\s*number|mobile|mobile\s*number|contact\s*number|registered\s*number|sampark)\b", lower_rep))
         if is_phone_req:
+            thought = f"Statutory Strategy: Supplying registered consumer phone {phone}."
             if is_hindi:
-                return f"Unka registered mobile number {phone} hai."
-            return f"His registered mobile number is {phone}."
+                spoken = f"Unka registered mobile number {phone} hai."
+            else:
+                spoken = f"His registered mobile number is {phone}."
+            return spoken, thought
 
         # 7. Disputed Amount
         is_amt_req = bool(re.search(r"\b(amount|disputed\s*amount|kitna|paise|rupaye|how\s*much|charges|refund\s*amount)\b", lower_rep))
         if is_amt_req:
+            thought = f"Statutory Strategy: Stating disputed sum of Rs {amt} based on intake filing."
             if is_hindi:
-                return f"Disputed amount Rs {amt} hai."
-            return f"The disputed amount is Rs {amt}."
+                spoken = f"Disputed amount Rs {amt} hai."
+            else:
+                spoken = f"The disputed amount is Rs {amt}."
+            return spoken, thought
 
         # 8. Operator Acknowledging or Reviewing Docket ("I can see the dispute", "checking", "looking into")
         is_ack = bool(re.search(r"\b(see\s+the\s+dispute|can\s+see|looking\s+into|checking|one\s+moment|give\s+me\s+a\s+moment|hold\s+on|let\s+me\s+check|details)\b", lower_rep))
         if is_ack:
+            thought = f"Statutory Strategy: Representative reviewing files. Acknowledging and requesting reversal confirmation."
             if is_hindi:
-                return f"Ji representative ji, kripya details verify karein aur Rs {amt} ka reversal confirm karein."
-            return f"Thank you representative. Please verify the details and confirm the reversal of Rs {amt}."
+                spoken = f"Ji representative ji, kripya details verify karein aur Rs {amt} ka reversal confirm karein."
+            else:
+                spoken = f"Thank you representative. Please verify the details and confirm the reversal of Rs {amt}."
+            return spoken, thought
 
         # 9. Problem / Issue explanation
         is_prob_req = bool(re.search(r"\b(problem|dikkat|issue|pareshani|kya\s+hua|explain|what\s+happened|reason\s+for\s+call)\b", lower_rep))
         if is_prob_req:
-            if is_hindi:
-                return default_prob_hindi
-            return default_prob_en
+            thought = f"Statutory Strategy: Providing clear factual synopsis of {dispute_nature}."
+            spoken = default_prob_hindi if is_hindi else default_prob_en
+            return spoken, thought
 
         # 10. Desired resolution
         is_res_req = bool(re.search(r"\b(resolution|want|chahte|samadhan|solution|settlement)\b", lower_rep))
         if is_res_req:
-            if is_hindi:
-                return default_res_hindi
-            return default_res_en
+            thought = f"Statutory Strategy: Demanding direct monetary restitution of Rs {amt}."
+            spoken = default_res_hindi if is_hindi else default_res_en
+            return spoken, thought
 
         # For nuanced / conversational turns, query Sarvam LLM via persistent pooled connection
+        thought = f"Statutory Strategy: Formulating context-aware advocate response for {dispute_nature}."
         try:
             url = f"{self.base_url}/chat/completions"
             client = _get_sarvam_client()
@@ -740,13 +795,158 @@ class SarvamExtractor:
                 content = (msg.get("content") or "").strip()
                 clean_content = content.replace('"', '').replace('*', '').strip()
                 if clean_content and len(clean_content) > 10:
-                    return clean_content
+                    return clean_content, thought
         except Exception as e:
             logger.debug(f"Sarvam LLM fallback: {e}")
 
         if is_hindi:
-            return f"Kripya account {id_val} ke Rs {amt} dispute par resolution timeline batayein."
-        return f"Could you please advise on the concrete resolution timeline for the Rs {amt} dispute under account {id_val}?"
+            spoken = f"Kripya account {id_val} ke Rs {amt} dispute par resolution timeline batayein."
+        else:
+            spoken = f"Could you please advise on the concrete resolution timeline for the Rs {amt} dispute under account {id_val}?"
+        return spoken, thought
+
+    async def enhance_grievance(
+        self,
+        raw_text: str,
+        domain: str = "telecom",
+        provider: str = "Customer Support",
+        amount: str = "",
+        identifier: str = "",
+    ) -> dict[str, Any]:
+        """
+        Takes consumer's raw informal grievance notes and autonomously polishes
+        it into a formal statutory legal grievance citing exact consumer protection regulations.
+        """
+        clean_text = raw_text.strip()
+        amt_str = f"₹{amount}" if amount else "the disputed amount"
+        id_str = f" under reference {identifier}" if identifier else ""
+
+        statutory_map = {
+            "banking": {
+                "law": "RBI Integrated Ombudsman Scheme 2021 & Circular DPSS.CO.PD No.629/02.01.014/2019-20",
+                "rules": [
+                    "Harmonisation of Turnaround Time (TAT) for Failed Transactions",
+                    "Mandatory T+5 working days auto-reversal requirement",
+                    "Statutory delay compensation of ₹100 per day for delay beyond T+5"
+                ],
+                "template": (
+                    f"A transaction of {amt_str}{id_str} debited from my bank account failed at the recipient/merchant gateway. "
+                    f"Despite elapse of the statutory turnaround time mandated under the RBI Integrated Ombudsman Scheme and "
+                    f"RBI Circular on Harmonisation of Turnaround Time (TAT), the funds have not been reversed. "
+                    f"Formally requesting immediate credit reversal of {amt_str} along with applicable statutory delay compensation."
+                )
+            },
+            "ecommerce": {
+                "law": "Consumer Protection (E-Commerce) Rules 2020 & CPA 2019 Section 2(47)",
+                "rules": [
+                    "Mandatory 48-hour grievance acknowledgment",
+                    "Statutory refund timeline for returned merchandise",
+                    "Prohibition of forced store credit or restricted wallet diversion"
+                ],
+                "template": (
+                    f"The returned merchandise under {provider}{id_str} was delivered and verified at the return logistics warehouse. "
+                    f"However, the refund of {amt_str} has not been credited to the original payment source within statutory limits. "
+                    f"In accordance with Consumer Protection (E-Commerce) Rules 2020, I formally demand immediate bank clearance of {amt_str}."
+                )
+            },
+            "travel": {
+                "law": "DGCA Passenger Charter & AirSewa Regulations 2019",
+                "rules": [
+                    "Statutory 7-day refund timeline for cancelled bookings",
+                    "Prohibition of non-consensual credit shell conversion",
+                    "Right to statutory passenger compensation for unreasonable delay"
+                ],
+                "template": (
+                    f"Booking{id_str} with {provider} was cancelled, yet the statutory refund of {amt_str} has not been processed. "
+                    f"Under the DGCA Passenger Charter, ticket refunds must be credited within 7 working days. "
+                    f"Holding these funds constitutes a regulatory breach; requesting immediate refund to original source of payment."
+                )
+            },
+            "insurance": {
+                "law": "IRDAI (Protection of Policyholders' Interests) Regulations 2017",
+                "rules": [
+                    "Mandatory 15-day claim disbursement timeline upon approval",
+                    "Right to claim escalation under Bima Bharosa Insurance Ombudsman",
+                    "Interest penalty on delayed settlement beyond statutory window"
+                ],
+                "template": (
+                    f"Reimbursement claim{id_str} has been duly approved by {provider}, yet final disbursement of {amt_str} has been "
+                    f"unlawfully withheld beyond the statutory 15-day SLA prescribed under IRDAI Policyholder Protection Regulations. "
+                    f"Demanding immediate electronic fund transfer of the approved sum."
+                )
+            },
+            "edtech": {
+                "law": "Consumer Protection Act 2019 & UGC Guidelines on Fee Refunds",
+                "rules": [
+                    "Mandatory 14-day statutory cooling-off withdrawal window",
+                    "Full refund entitlement without unfair cancellation penalties",
+                    "Immediate cancellation of third-party NBFC auto-debit financing"
+                ],
+                "template": (
+                    f"Enrollment withdrawal request{id_str} was formally submitted within the 14-day statutory cooling-off window. "
+                    f"Despite written confirmation, {provider} has withheld the refund of {amt_str} and auto-debit loan deductions continue. "
+                    f"Under Section 2(47) of the Consumer Protection Act 2019, I demand immediate refund of {amt_str} and loan closure."
+                )
+            },
+            "mobility": {
+                "law": "Motor Vehicle Aggregator Guidelines 2020 & CPA 2019",
+                "rules": [
+                    "Prohibition of cancellation penalty when driver refuses arrival",
+                    "Audit of GPS route deviation toll charges",
+                    "Mandatory 48-hour customer care resolution SLA"
+                ],
+                "template": (
+                    f"During booking{id_str} with {provider}, the assigned driver declined to arrive at the pickup location, yet a wrongful "
+                    f"cancellation penalty of {amt_str} was debited from my account. Under the Motor Vehicle Aggregator Guidelines 2020, "
+                    f"levying penalties for driver non-compliance is an unfair practice. Requesting immediate reversal of {amt_str}."
+                )
+            },
+            "housing": {
+                "law": "Model Tenancy Act 2021 & RERA Framework",
+                "rules": [
+                    "Mandatory return of security deposit within 30 days of vacant possession",
+                    "Statutory requirement for signed inspection damage proof",
+                    "Rent authority penalty for unlawful deposit withholding"
+                ],
+                "template": (
+                    f"The tenancy premises{id_str} were vacated with full move-out inspection clearance. More than 30 days have elapsed, "
+                    f"yet the security deposit of {amt_str} has not been refunded by {provider}. Under the Model Tenancy Act, security "
+                    f"deposits must be returned within 30 days of handover. Demanding immediate release of the full deposit."
+                )
+            },
+            "utilities": {
+                "law": "Electricity Act 2003 & State Electricity Regulatory Commission (SERC) Code",
+                "rules": [
+                    "Prohibition of provisional meter billing without physical inspection",
+                    "Mandatory meter testing within statutory timeline upon dispute",
+                    "Right to bill revision and interest on excess security deposits"
+                ],
+                "template": (
+                    f"Account{id_str} has been billed an erratic provisional charge of {amt_str} by {provider} without on-site meter inspection. "
+                    f"Billing arbitrary provisional figures without verifying consumption violates the State Electricity Regulatory Commission "
+                    f"Supply Code. I demand an immediate revised bill and adjustment of {amt_str} on the consumer ledger."
+                )
+            },
+            "telecom": {
+                "law": "TRAI Quality of Service and Consumer Protection Regulations 2012",
+                "rules": [
+                    "Prohibition of unauthorized VAS activations without double-consent",
+                    "Mandatory billing credit waiver for prolonged service outage",
+                    "30-day statutory resolution timeline under TRAI mandate"
+                ],
+                "template": (
+                    f"Unauthorized deduction/VAS charge of {amt_str} was billed on account{id_str} by {provider} without explicit two-factor consent. "
+                    f"Under TRAI Consumer Protection Regulations, unauthorized service activation is illegal. I demand full reversal of {amt_str}."
+                )
+            }
+        }
+
+        d_info = statutory_map.get(domain.lower(), statutory_map["telecom"])
+        return {
+            "enhanced_text": d_info["template"],
+            "statutory_citations": d_info["rules"],
+            "legal_basis": d_info["law"],
+        }
 
     async def _call_api(self, payload: dict) -> dict | None:
         """Make the API call, handle errors, return parsed JSON or None."""

@@ -21,6 +21,8 @@ import {
   Globe,
   CheckCircle2,
   Loader2,
+  ShieldCheck,
+  RotateCcw,
 } from "lucide-react";
 import { casesApi, callsApi } from "../lib/api";
 import { useStore } from "../store";
@@ -361,6 +363,10 @@ export default function IntakePage() {
   const [phoneNumber, setPhoneNumber] = useState("+91 91030 31412");
   const [amount, setAmount] = useState("");
   const [goal, setGoal] = useState("");
+  const [previousGoal, setPreviousGoal] = useState<string | null>(null);
+  const [isPolishing, setIsPolishing] = useState(false);
+  const [statutoryCitations, setStatutoryCitations] = useState<string[]>([]);
+  const [legalBasis, setLegalBasis] = useState<string | null>(null);
   const [language, setLanguage] = useState("hi-en");
   const [email, setEmail] = useState("nikhilsharma5122006@gmail.com");
   const [consent, setConsent] = useState(true);
@@ -392,6 +398,44 @@ export default function IntakePage() {
     setUserCustomizedHelpline(false);
     setAmount("");
     setGoal("");
+    setPreviousGoal(null);
+    setStatutoryCitations([]);
+    setLegalBasis(null);
+  };
+
+  const handleEnhanceGrievance = async () => {
+    setIsPolishing(true);
+    setError("");
+    try {
+      const rawText = goal.trim() || selectedDomain.defaultGoal;
+      const res = await casesApi.enhanceGrievance({
+        raw_text: rawText,
+        domain: selectedDomain.id,
+        provider: provider.trim() || selectedDomain.defaultProvider,
+        amount: amount.trim() || selectedDomain.defaultAmount,
+        identifier: identifierValue.trim() || selectedDomain.defaultIdentifier,
+      });
+
+      if (res && res.enhanced_text) {
+        setPreviousGoal(goal || selectedDomain.defaultGoal);
+        setGoal(res.enhanced_text);
+        setStatutoryCitations(res.statutory_citations || []);
+        setLegalBasis(res.legal_basis || null);
+      }
+    } catch (err: any) {
+      console.error("Failed to enhance grievance:", err);
+    } finally {
+      setIsPolishing(false);
+    }
+  };
+
+  const handleUndoEnhance = () => {
+    if (previousGoal !== null) {
+      setGoal(previousGoal);
+      setPreviousGoal(null);
+      setStatutoryCitations([]);
+      setLegalBasis(null);
+    }
   };
 
   const handleStart = async () => {
@@ -734,36 +778,97 @@ export default function IntakePage() {
             </div>
 
             {/* Grievance Synopsis */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <label className="text-xs font-medium text-white/70">
                   Describe what happened
                 </label>
-                <div className="flex items-center gap-1 bg-black/30 p-0.5 rounded-lg border border-white/[0.08]">
-                  {LANGUAGES.map((l) => (
+                <div className="flex items-center gap-2">
+                  {/* AI Grievance Polisher Buttons */}
+                  {previousGoal !== null && (
                     <button
-                      key={l.code}
                       type="button"
-                      onClick={() => setLanguage(l.code)}
-                      className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-all ${
-                        language === l.code
-                          ? "bg-brand-600 text-white shadow-sm"
-                          : "text-white/40 hover:text-white"
-                      }`}
+                      onClick={handleUndoEnhance}
+                      className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white/[0.05] border border-white/10 text-white/70 hover:text-white hover:bg-white/10 transition-all flex items-center gap-1"
+                      title="Revert to prior draft"
                     >
-                      {l.label}
+                      <RotateCcw className="w-3 h-3 text-amber-400" />
+                      <span>Undo</span>
                     </button>
-                  ))}
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleEnhanceGrievance}
+                    disabled={isPolishing}
+                    className="text-[11px] font-bold px-3 py-1 rounded-lg bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white shadow-md shadow-brand-500/20 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
+                    title="Enrich with Indian statutory laws, SLA deadlines & ombudsman citations"
+                  >
+                    {isPolishing ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin text-white" />
+                        <span>Polishing with Law...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3 h-3 text-amber-300" />
+                        <span>AI Legalize Grievance</span>
+                      </>
+                    )}
+                  </button>
+
+                  <div className="flex items-center gap-1 bg-black/30 p-0.5 rounded-lg border border-white/[0.08]">
+                    {LANGUAGES.map((l) => (
+                      <button
+                        key={l.code}
+                        type="button"
+                        onClick={() => setLanguage(l.code)}
+                        className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-all ${
+                          language === l.code
+                            ? "bg-brand-600 text-white shadow-sm"
+                            : "text-white/40 hover:text-white"
+                        }`}
+                      >
+                        {l.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
               <textarea
                 id="goal-input"
-                className="input resize-none h-24 text-xs sm:text-sm bg-black/30 border-white/[0.08] focus:border-brand-500/60 rounded-xl leading-relaxed"
+                className="input resize-none h-28 text-xs sm:text-sm bg-black/30 border-white/[0.08] focus:border-brand-500/60 rounded-xl leading-relaxed"
                 placeholder={selectedDomain.defaultGoal}
                 value={goal}
                 onChange={(e) => setGoal(e.target.value)}
               />
+
+              {/* Statutory Legal Citations Display when enhanced */}
+              {legalBasis && statutoryCitations.length > 0 && (
+                <div className="p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/30 space-y-1.5 animate-fadeIn">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-indigo-300 flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+                      Statutory Framework: {legalBasis}
+                    </span>
+                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                      Legally Enriched
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    {statutoryCitations.map((citation, idx) => (
+                      <span
+                        key={idx}
+                        className="text-[10.5px] font-mono bg-white/[0.04] text-indigo-200/90 px-2 py-0.5 rounded-md border border-indigo-500/20 flex items-center gap-1"
+                      >
+                        <span className="w-1 h-1 rounded-full bg-indigo-400" />
+                        {citation}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Quick Template Chips */}
               <div className="flex flex-wrap items-center gap-1.5 pt-1">
@@ -774,7 +879,12 @@ export default function IntakePage() {
                   <button
                     key={idx}
                     type="button"
-                    onClick={() => setGoal(preset)}
+                    onClick={() => {
+                      setGoal(preset);
+                      setStatutoryCitations([]);
+                      setLegalBasis(null);
+                      setPreviousGoal(null);
+                    }}
                     className="text-left text-[11px] px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.06] text-white/60 hover:text-white hover:bg-white/[0.06] transition-all truncate max-w-[260px]"
                   >
                     {preset}

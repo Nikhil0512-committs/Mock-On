@@ -60,6 +60,20 @@ export const casesApi = {
   getEvidencePdfUrl: (id: string) => `${API_BASE}/cases/${id}/evidence.pdf`,
   getTranscriptTxtUrl: (id: string) => `${API_BASE}/cases/${id}/transcript.txt`,
   getAudioWavUrl: (id: string) => `${API_BASE}/cases/${id}/audio.wav`,
+  enhanceGrievance: (data: {
+    raw_text: string;
+    domain?: string;
+    provider?: string;
+    amount?: string;
+    identifier?: string;
+  }) =>
+    api
+      .post<{
+        enhanced_text: string;
+        statutory_citations: string[];
+        legal_basis: string;
+      }>("/cases/enhance_grievance", data)
+      .then((r) => r.data),
 };
 
 export const callsApi = {

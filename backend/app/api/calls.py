@@ -365,7 +365,7 @@ async def send_call_message(
                         })
 
                 # Generate intelligent context-aware reply using Sarvam LLM + Intake docket
-                advocate_text = await sarvam_extractor.generate_advocate_response(
+                adv_result = await sarvam_extractor.generate_advocate_response(
                     case_info=info,
                     goal=goal_text,
                     recent_turns=recent_db_turns,
@@ -373,6 +373,10 @@ async def send_call_message(
                     is_refusal=is_refusal,
                     promise_detected=promise_detected,
                 )
+                if isinstance(adv_result, tuple):
+                    advocate_text, thought_process = adv_result
+                else:
+                    advocate_text, thought_process = adv_result, "Autonomous Strategy: Applying domain regulations."
 
                 # If representative refused, dispatch an immediate statutory notice email to consumer
                 if is_refusal and case:
@@ -418,6 +422,7 @@ async def send_call_message(
                         "id": adv_id,
                         "speaker": "user",
                         "text": advocate_text,
+                        "thought_process": thought_process,
                         "is_final": True,
                         "latencyMs": 110,
                         "audio_b64": adv_audio,
