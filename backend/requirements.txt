@@ -1,0 +1,51 @@
+# Web Framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+websockets==13.1
+python-multipart==0.0.9
+
+# Database - Neon (PostgreSQL async)
+sqlalchemy==2.0.36
+asyncpg==0.30.0
+pgvector==0.3.5
+alembic==1.13.3
+
+# Pydantic & settings
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-dotenv==1.0.1
+
+# HTTP client (Gnani / Sarvam API calls)
+httpx==0.27.2
+aiohttp==3.10.10
+aiofiles==24.1.0
+
+# Embeddings - multilingual-e5-small (runs locally on CPU)
+sentence-transformers==3.2.1
+torch==2.4.1
+transformers==4.45.2
+
+# Audio processing
+numpy==2.1.2
+
+# PDF generation (Evidence Pack)
+reportlab==4.2.5
+Pillow==10.4.0
+
+# Date / time parsing
+python-dateutil==2.9.0.post0
+pytz==2024.2
+
+# Tokenization / text utilities
+regex==2024.9.11
+
+# Background tasks
+apscheduler==3.10.4
+
+# Logging
+structlog==24.4.0
+
+# Testing
+pytest==8.3.3
+pytest-asyncio==0.24.0
+httpx==0.27.2

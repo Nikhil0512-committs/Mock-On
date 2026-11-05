@@ -1,0 +1,112 @@
+{
+  "id": "telecom_billing_v1",
+  "name": "Telecom Billing Dispute — XYZ Telecom",
+  "description": "A fictional telecom billing complaint: wrong bill amount, requesting refund",
+  "language": "hi-IN",
+
+  "greeting_text": "Namaskar, aapka swagat hai XYZ Telecom ke customer care mein. Behtar seva ke liye yeh call record ki ja sakti hai.",
+
+  "menu_tree": {
+    "root": {
+      "prompt": "Apni bhasha chunein. Hindi ke liye 1 dabaen, English ke liye 2 dabaen.",
+      "options": [
+        {"key": "1", "label": "Hindi", "next": "main_menu"},
+        {"key": "2", "label": "English", "next": "main_menu_en"}
+      ]
+    },
+    "main_menu": {
+      "prompt": "Billing ki jaankari ke liye 1, naye connection ke liye 2, technical sahayata ke liye 3, baaki jaankari ke liye 0 dabaen.",
+      "options": [
+        {"key": "1", "label": "Billing aur payment", "next": "billing_menu"},
+        {"key": "2", "label": "Naya connection", "next": "hold"},
+        {"key": "3", "label": "Technical support", "next": "hold"},
+        {"key": "0", "label": "Operator", "next": "hold"}
+      ]
+    },
+    "billing_menu": {
+      "prompt": "Bill mein galti ki shikayat ke liye 1, refund ke liye 2, bill ki copy ke liye 3 dabaen.",
+      "options": [
+        {"key": "1", "label": "Bill mein galti", "next": "hold"},
+        {"key": "2", "label": "Refund request", "next": "hold"},
+        {"key": "3", "label": "Bill copy", "next": "hold"}
+      ]
+    }
+  },
+
+  "hold_segment": {
+    "type": "music",
+    "duration_seconds": 12,
+    "text": "[Hold music playing...]"
+  },
+
+  "agent_script": [
+    {
+      "role": "agent",
+      "text": "Namaskar, mera naam Priya hai. Main aapki kaise madad kar sakti hoon?",
+      "is_greeting": true
+    },
+    {
+      "role": "user",
+      "text": "Haan, mujhe mera November ka bill zyada aaya hai. Mere plan mein sirf 499 rupaye tha, lekin 847 rupaye cut gaye hain.",
+      "intent": "billing_complaint"
+    },
+    {
+      "role": "agent",
+      "text": "Ji zaroor, main aapki madad karoogi. Kya aap apna registered mobile number bata sakte hain?",
+      "request": "account_number"
+    },
+    {
+      "role": "user",
+      "text": "Haan, 9876543210.",
+      "response": "account_number"
+    },
+    {
+      "role": "agent",
+      "text": "Theek hai, maine aapka account check kiya. Aapke bill mein 348 rupaye extra charge kiye gaye hain — yeh international roaming charges hain jo October mein lage the. Yeh November ke bill mein add hue hain.",
+      "explains": "bill_reason"
+    },
+    {
+      "role": "user",
+      "text": "Lekin maine koi international call nahi ki thi! Main India mein hi tha poore October mein.",
+      "dispute": true
+    },
+    {
+      "role": "agent",
+      "text": "Ji, main samajh sakti hoon. Main aapka complaint register kar rahi hoon. Aapka ticket number hai TKT-2026-78432. Yeh 348 rupaye ka refund aapko paanch kaam karne wale dinon mein aapke account mein credit kar diya jaega.",
+      "contains_promise": true,
+      "promise_type": "refund",
+      "amount": 348.0,
+      "deadline": "paanch kaam karne wale din"
+    },
+    {
+      "role": "user",
+      "text": "Theek hai, thank you. Aur yeh ticket number safe hai na?",
+      "confirmation": true
+    },
+    {
+      "role": "agent",
+      "text": "Bilkul, ticket TKT-2026-78432 fully registered hai. Aapko SMS aur email dono mein confirmation milega. Koi aur sawaal?",
+      "closes": true
+    },
+    {
+      "role": "user",
+      "text": "Nahi, shukriya.",
+      "ends": true
+    },
+    {
+      "role": "agent",
+      "text": "Dhanyawad XYZ Telecom mein call karne ke liye. Aapka din shubh ho.",
+      "farewell": true
+    }
+  ],
+
+  "expected_promises": [
+    {
+      "commitment_type": "refund",
+      "amount": 348.0,
+      "speaker": "agent",
+      "raw_date_phrase": "paanch kaam karne wale din",
+      "ticket_id": "TKT-2026-78432"
+    }
+  ]
+}
