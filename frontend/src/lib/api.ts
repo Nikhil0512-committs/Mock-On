@@ -103,6 +103,25 @@ export const casesApi = {
   getEvidencePdfUrl: (id: string) => `${API_BASE}/cases/${id}/evidence.pdf`,
   getTranscriptTxtUrl: (id: string) => `${API_BASE}/cases/${id}/transcript.txt`,
   getAudioWavUrl: (id: string) => `${API_BASE}/cases/${id}/audio.wav`,
+  getLegalNoticePdfUrl: (id: string) => `${API_BASE}/cases/${id}/legal-notice.pdf`,
+  getLegalNoticeData: (id: string) =>
+    api
+      .get<{
+        case_id: string;
+        portal_name: string;
+        portal_url: string;
+        alt_portal_name: string;
+        alt_portal_url: string;
+        ticket_number: string;
+        provider: string;
+        disputed_amount: string;
+        consumer_name: string;
+        statutory_act: string;
+        complaint_subject: string;
+        complaint_body: string;
+        pdf_url: string;
+      }>(`/cases/${id}/legal-notice`)
+      .then((r) => r.data),
   enhanceGrievance: (data: {
     raw_text: string;
     domain?: string;

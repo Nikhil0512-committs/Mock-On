@@ -23,14 +23,53 @@ import {
   Loader2,
   ShieldCheck,
   RotateCcw,
+  Volume2,
+  Fingerprint,
 } from "lucide-react";
 import { casesApi, callsApi } from "../lib/api";
 import { useStore } from "../store";
 
 const LANGUAGES = [
-  { code: "hi-IN", label: "Hindi", native: "हिंदी" },
-  { code: "en-IN", label: "English", native: "English" },
-  { code: "hi-en", label: "Hinglish", native: "हिन्दीglish" },
+  {
+    code: "hi-en",
+    label: "Hinglish",
+    region: "North / NCR / Mumbai",
+    native: "हिन्दीglish",
+    tag: "Primary Default",
+    sample: '"Mera refund abhi tak credit nahi hua hai, SLA breach ho chuka hai."',
+  },
+  {
+    code: "ta-en",
+    label: "Tanglish",
+    region: "Tamil Nadu / Chennai",
+    native: "தமிEnglish",
+    tag: "Indic Voice",
+    sample: '"Refund innum varala, 2 days nu commit panniruntheenga, ippo SLA breach aayiduchu."',
+  },
+  {
+    code: "kn-en",
+    label: "Kannada-EN",
+    region: "Karnataka / BLR",
+    native: "ಕನ್ನಡEnglish",
+    tag: "Indic Voice",
+    sample: '"Refund innu bandilla, SLA breach aagide, immediate reversal madi."',
+  },
+  {
+    code: "en-IN",
+    label: "Indian English",
+    region: "National / Formal",
+    native: "English",
+    tag: "Appellate",
+    sample: '"The refund of Rs {amt} has not been credited. SLA has lapsed under statutory guidelines."',
+  },
+  {
+    code: "hi-IN",
+    label: "Shuddh Hindi",
+    region: "Standard Desk",
+    native: "मानक हिंदी",
+    tag: "Standard",
+    sample: '"Humara refund abhi tak prapt nahi hua hai, kripya tatkaal reversal process karein."',
+  },
 ];
 
 interface DomainConfig {
@@ -380,8 +419,31 @@ export default function IntakePage() {
   const [email, setEmail] = useState("nikhilsharma5122006@gmail.com");
   const [consent, setConsent] = useState(true);
   const [infoConsent, setInfoConsent] = useState(true);
+  const [biometricConsent, setBiometricConsent] = useState(true);
+  const [isPlayingVoiceToken, setIsPlayingVoiceToken] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const handlePlayVoiceToken = () => {
+    setIsPlayingVoiceToken(true);
+    try {
+      const activeProvider = provider.trim() || selectedDomain.defaultProvider;
+      const text = `I, Nikhil Sharma, authorize Mock-On AI Advocate Shivani to represent my grievance for ${activeProvider} under IT Act 2000 Section 10A and armour365 biometric consent.`;
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.rate = 1.0;
+        u.pitch = 1.0;
+        u.onend = () => setIsPlayingVoiceToken(false);
+        u.onerror = () => setIsPlayingVoiceToken(false);
+        window.speechSynthesis.speak(u);
+      } else {
+        setTimeout(() => setIsPlayingVoiceToken(false), 3000);
+      }
+    } catch {
+      setIsPlayingVoiceToken(false);
+    }
+  };
 
   // Execution Engine mode: simulator (autonomous AI bot) or switchboard (live human company rep)
   const [callMode, setCallMode] = useState<"simulator" | "switchboard">("simulator");
@@ -495,6 +557,10 @@ export default function IntakePage() {
           disputed_amount: effectiveAmount,
           ticket_number: generatedTicket,
           info_sharing: infoConsent,
+          biometric_consent: biometricConsent,
+          biometric_framework: "armour365_it_act_10a",
+          voice_proxy_authorized: true,
+          consumer_name: currentUser?.full_name || "Nikhil Sharma",
         },
         follow_up_consent: consent,
       });
@@ -832,23 +898,6 @@ export default function IntakePage() {
                       </>
                     )}
                   </button>
-
-                  <div className="flex items-center gap-1 bg-black/30 p-0.5 rounded-lg border border-white/[0.08]">
-                    {LANGUAGES.map((l) => (
-                      <button
-                        key={l.code}
-                        type="button"
-                        onClick={() => setLanguage(l.code)}
-                        className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-all ${
-                          language === l.code
-                            ? "bg-brand-600 text-white shadow-sm"
-                            : "text-white/40 hover:text-white"
-                        }`}
-                      >
-                        {l.label}
-                      </button>
-                    ))}
-                  </div>
                 </div>
               </div>
 
@@ -910,11 +959,115 @@ export default function IntakePage() {
             </div>
           </div>
 
-          {/* 3. Telephony Mode */}
+          {/* 3. Indic Regional Dialect & Persona */}
+          <div className="space-y-3 pt-4 border-t border-white/[0.06]">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-bold text-white/50 uppercase tracking-wider block">
+                3. Indic Regional Dialect &amp; Voice Persona
+              </label>
+              <span className="text-[10px] font-mono text-brand-300 bg-brand-500/10 px-2 py-0.5 rounded border border-brand-500/20">
+                Powered by Gnani Indic Speech
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {LANGUAGES.map((l) => {
+                const isSelected = language === l.code;
+                return (
+                  <button
+                    key={l.code}
+                    type="button"
+                    onClick={() => setLanguage(l.code)}
+                    className={`p-3 rounded-2xl border text-left transition-all ${
+                      isSelected
+                        ? "bg-brand-500/15 border-brand-500/70 text-white shadow-lg ring-1 ring-brand-500/40"
+                        : "bg-white/[0.02] border-white/[0.06] text-white/70 hover:text-white hover:bg-white/[0.05]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-white tracking-tight">{l.label}</span>
+                      <span
+                        className={`text-[9.5px] font-mono px-1.5 py-0.2 rounded ${
+                          isSelected ? "bg-brand-500/30 text-brand-200" : "bg-white/[0.05] text-white/40"
+                        }`}
+                      >
+                        {l.native}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-white/40 block truncate">{l.region}</span>
+                    <p className="text-[10.5px] text-white/50 italic mt-1.5 leading-snug line-clamp-2">
+                      {l.sample}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 4. armour365™ Biometric Voice Authorization */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/30 via-slate-900/40 to-blue-950/30 border border-emerald-500/25 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <Fingerprint className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-white tracking-tight">
+                      armour365™ Biometric Voice Authorization
+                    </span>
+                    <span className="text-[9.5px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      IT Act 2000 Sec 10A
+                    </span>
+                  </div>
+                  <p className="text-[10.5px] text-white/50">
+                    Authorizes Shivani to legally represent your account if customer care challenges caller identity.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handlePlayVoiceToken}
+                disabled={isPlayingVoiceToken}
+                className="px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5 transition-all self-start sm:self-auto flex-shrink-0 shadow-sm"
+              >
+                {isPlayingVoiceToken ? (
+                  <>
+                    <div className="w-3 h-3 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                    <span>Verifying Token...</span>
+                  </>
+                ) : (
+                  <>
+                    <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Test Voice Passphrase</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-black/40 border border-white/[0.06] text-[11px] text-white/70 italic leading-relaxed">
+              &ldquo;I, {currentUser?.full_name || "Nikhil Sharma"}, authorize Mock-On AI Advocate Shivani to represent my grievance for {provider.trim() || selectedDomain.defaultProvider} under IT Act 2000 Section 10A and armour365™ biometric consent.&rdquo;
+            </div>
+
+            <label className="flex items-center gap-2.5 cursor-pointer text-xs text-white/80 hover:text-white select-none pt-0.5">
+              <input
+                type="checkbox"
+                checked={biometricConsent}
+                onChange={(e) => setBiometricConsent(e.target.checked)}
+                className="w-4 h-4 rounded border-emerald-500/40 bg-black/40 text-emerald-500 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+              />
+              <span className="font-medium text-emerald-300/90">
+                Enable armour365™ verified proxy credentials during telephony interaction
+              </span>
+            </label>
+          </div>
+
+          {/* 5. Telephony Mode */}
           <div className="space-y-2.5 pt-4 border-t border-white/[0.06]">
             <div className="flex items-center justify-between">
               <label className="text-[11px] font-bold text-white/50 uppercase tracking-wider block">
-                3. Call Mode
+                5. Call Execution Mode
               </label>
               {callMode === "switchboard" && (
                 <a

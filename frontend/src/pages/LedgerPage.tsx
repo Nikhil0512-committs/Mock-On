@@ -39,6 +39,7 @@ import { promisesApi, casesApi } from "../lib/api";
 import { useStore } from "../store";
 import type { Promise as HPromise, PromiseStatus, Case } from "../types";
 import ShareFamilyModal from "../components/ShareFamilyModal";
+import LegalNoticeModal from "../components/LegalNoticeModal";
 
 const STATUS_CONFIG: Record<
   PromiseStatus,
@@ -384,6 +385,7 @@ export default function LedgerPage() {
   const [loadingCases, setLoadingCases] = useState(true);
   const [selectedDomain, setSelectedDomain] = useState<string>("all");
   const [familyModalOpen, setFamilyModalOpen] = useState(false);
+  const [legalNoticeCaseId, setLegalNoticeCaseId] = useState<string | null>(null);
   const [resendingEmail, setResendingEmail] = useState(false);
   const [resendStatus, setResendStatus] = useState<string | null>(null);
 
@@ -753,6 +755,15 @@ export default function LedgerPage() {
                     <span>Transcript</span>
                   </a>
                   <button
+                    id="ledger-legal-notice-btn"
+                    onClick={() => setLegalNoticeCaseId(activeCase.id)}
+                    className="btn-ghost text-xs py-1.5 px-3 text-red-300 border border-red-500/30 hover:bg-red-500/10 flex items-center gap-1.5 shadow-sm"
+                    title="Generate Formal NCH/RBI Statutory Grievance Notice"
+                  >
+                    <Scale className="w-3.5 h-3.5 text-red-400" />
+                    <span>Legal Notice</span>
+                  </button>
+                  <button
                     onClick={() => setFamilyModalOpen(true)}
                     className="btn-ghost text-xs py-1.5 px-3 text-white/70 hover:text-white"
                     title="Share case with family"
@@ -954,6 +965,13 @@ export default function LedgerPage() {
           caseId={activeCase.id}
         />
       )}
+
+      {/* 1-Click Formal NCH / RBI Grievance Notice Modal */}
+      <LegalNoticeModal
+        isOpen={Boolean(legalNoticeCaseId)}
+        onClose={() => setLegalNoticeCaseId(null)}
+        caseId={legalNoticeCaseId}
+      />
     </div>
   );
 }

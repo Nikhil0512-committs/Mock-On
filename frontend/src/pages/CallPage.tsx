@@ -30,6 +30,7 @@ import {
   ShieldAlert,
   Zap,
   Brain,
+  Fingerprint,
 } from "lucide-react";
 import { useStore } from "../store";
 import { useCallWebSocket } from "../hooks/useCallWebSocket";
@@ -458,6 +459,29 @@ export default function CallPage() {
                   Dialing: {(caseInfo.helpline_number as string) || (caseInfo.support_number as string)}
                 </span>
               )}
+              {Boolean((caseInfo.biometric_consent) || (caseInfo.biometric_framework)) && (
+                <span
+                  className="text-emerald-300 text-[11px] font-mono hidden lg:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/25"
+                  title="armour365™ Voice Biometric Consent & IT Act Sec 10A Proxy Active"
+                >
+                  <Fingerprint className="w-3 h-3 text-emerald-400" />
+                  <span>armour365™ Proxy</span>
+                </span>
+              )}
+              <span className="text-brand-300 text-[11px] font-medium hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-brand-500/10 border border-brand-500/20">
+                <span>
+                  🗣️{" "}
+                  {activeCase?.language === "ta-en"
+                    ? "Tanglish"
+                    : activeCase?.language === "kn-en"
+                    ? "Kannada-EN"
+                    : activeCase?.language === "en-IN"
+                    ? "English"
+                    : activeCase?.language === "hi-IN"
+                    ? "Hindi"
+                    : "Hinglish"}
+                </span>
+              </span>
             </>
           )}
         </div>

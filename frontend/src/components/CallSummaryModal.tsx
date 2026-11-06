@@ -16,9 +16,11 @@ import {
   FileDown,
   Volume2,
   Sparkles,
+  Scale,
 } from "lucide-react";
 import { casesApi } from "../lib/api";
 import type { Case, Promise as HPromise } from "../types";
+import LegalNoticeModal from "./LegalNoticeModal";
 
 interface CallSummaryModalProps {
   isOpen: boolean;
@@ -42,6 +44,7 @@ export default function CallSummaryModal({
   const navigate = useNavigate();
   const [resending, setResending] = useState(false);
   const [resendStatus, setResendStatus] = useState<string | null>(null);
+  const [showLegalModal, setShowLegalModal] = useState(false);
 
   if (!isOpen || !caseData) return null;
 
@@ -394,6 +397,14 @@ export default function CallSummaryModal({
               <FileText className="w-3.5 h-3.5" />
               Evidence PDF
             </a>
+            <button
+              onClick={() => setShowLegalModal(true)}
+              className="btn-ghost text-xs py-2 px-3 text-red-300 border border-red-500/30 hover:bg-red-500/10 flex items-center gap-1.5 rounded-xl"
+              title="Generate Formal NCH/RBI Statutory Grievance Dossier"
+            >
+              <Scale className="w-3.5 h-3.5 text-red-400" />
+              Legal Notice
+            </button>
           </div>
 
           <button
@@ -408,6 +419,14 @@ export default function CallSummaryModal({
           </button>
         </div>
       </div>
+
+      {/* 1-Click Formal NCH / RBI Grievance Notice Modal */}
+      <LegalNoticeModal
+        isOpen={showLegalModal}
+        onClose={() => setShowLegalModal(false)}
+        caseId={caseData.id}
+        providerName={provider}
+      />
     </div>
   );
 }

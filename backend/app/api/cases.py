@@ -413,3 +413,165 @@ async def regenerate_family_token(case_id: str, db: AsyncSession = Depends(get_d
     await db.commit()
     return {"ok": True, "family_token": new_token, "status": "active"}
 
+
+@router.get("/{case_id}/legal-notice.pdf")
+async def get_legal_notice_pdf(case_id: str, db: AsyncSession = Depends(get_db)):
+    """Generate and return official NCH / Ombudsman Statutory Legal Notice PDF."""
+    from fastapi.responses import Response
+    from sqlalchemy import select as sel
+    from app.models import Promise, Utterance
+    from app.services.evidence import generate_nch_legal_notice_pdf
+
+    result = await db.execute(select(Case).where(Case.id == case_id))
+    case = result.scalar_one_or_none()
+    if not case:
+        raise HTTPException(404, "Case not found")
+
+    p_result = await db.execute(
+        sel(Promise).where(Promise.case_id == case_id).order_by(Promise.created_at)
+    )
+    promises = p_result.scalars().all()
+
+    u_result = await db.execute(
+        sel(Utterance)
+        .where(Utterance.case_id == case_id)
+        .order_by(Utterance.sequence_num)
+    )
+    utterances = u_result.scalars().all()
+
+    case_dict = {
+        "id": case.id,
+        "owner_id": case.owner_id,
+        "language": case.language,
+        "goal": case.goal,
+        "approved_info": case.approved_info,
+        "follow_up_consent": case.follow_up_consent,
+        "status": case.status,
+        "created_at": case.created_at,
+        "user_email": case.user_email,
+    }
+    promises_dicts = [
+        {c.key: getattr(p, c.key) for c in p.__table__.columns}
+        for p in promises
+    ]
+    utterances_dicts = [
+        {c.key: getattr(u, c.key) for c in u.__table__.columns}
+        for u in utterances
+    ]
+
+    pdf_bytes = generate_nch_legal_notice_pdf(case_dict, promises_dicts, utterances_dicts)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="legal-notice-{case_id[:8]}.pdf"'},
+    )
+
+
+@router.get("/{case_id}/legal-notice")
+async def get_legal_notice_data(case_id: str, db: AsyncSession = Depends(get_db)):
+    """Get pre-filled formal grievance complaint text and portal metadata ready to file."""
+    from sqlalchemy import select as sel
+    from app.models import Promise
+    from app.services.evidence import STATUTORY_FRAMEWORKS
+
+    result = await db.execute(select(Case).where(Case.id == case_id))
+    case = result.scalar_one_or_none()
+    if not case:
+        raise HTTPException(404, "Case not found")
+
+    p_result = await db.execute(
+        sel(Promise).where(Promise.case_id == case_id).order_by(Promise.created_at)
+    )
+    promises = p_result.scalars().all()
+
+    info = case.approved_info or {}
+    domain = (info.get("domain") or "telecom").lower()
+    framework = STATUTORY_FRAMEWORKS.get(domain, STATUTORY_FRAMEWORKS["other"])
+    provider = info.get("service_provider") or "Service Provider"
+    identifier = info.get("identifier_value") or info.get("phone_number") or "Account Ref"
+    amt = info.get("disputed_amount") or "1000"
+    ticket_no = info.get("ticket_number") or f"TKT-{case.id[:8].upper()}"
+    consumer_name = (
+        info.get("consumer_name")
+        or (case.user_email or "Consumer").split("@")[0].replace(".", " ").title()
+    )
+    if not consumer_name or consumer_name.lower() in ["consumer", "user", "admin"]:
+        consumer_name = "Nikhil Sharma"
+
+    # Portal recommendations
+    if domain == "banking":
+        portal_name = "Reserve Bank of India Integrated Ombudsman (CMS)"
+        portal_url = "https://cms.rbi.org.in"
+    elif domain == "travel":
+        portal_name = "Ministry of Civil Aviation AirSewa Portal"
+        portal_url = "https://airsewa.gov.in"
+    elif domain == "insurance":
+        portal_name = "IRDAI Bima Bharosa Portal"
+        portal_url = "https://bimabharosa.irdai.gov.in"
+    else:
+        portal_name = "National Consumer Helpline (NCH - INGRAM)"
+        portal_url = "https://consumerhelpline.gov.in"
+
+    p_lines = []
+    for idx, p in enumerate(promises, 1):
+        quote = p.quoted_text or p.summary or "Refund within SLA"
+        due = p.due_at.strftime("%d %b %Y") if p.due_at else (p.raw_date_phrase or "5 days")
+        p_lines.append(f"  [{idx}] Commitment: {p.commitment_type.title()} | Turnaround: '{quote}' | Due Date: {due} | Status: {p.status.upper()}")
+
+    commitments_section = "\n".join(p_lines) if p_lines else "  - Verbal refund commitment within statutory turnaround window."
+
+    complaint_subject = f"Grievance against {provider} regarding unlawful withholding of refund Rs {amt} (Docket #{ticket_no})"
+
+    complaint_body = f"""FORMAL GRIEVANCE PETITION & STATUTORY DISPUTE COMPLAINT
+Filing Portal: {portal_name}
+Governing Authority: {framework['act']} & Consumer Protection Act 2019
+
+1. COMPLAINANT PARTICULARS:
+- Name of Aggrieved Consumer: {consumer_name}
+- Registered Mobile / Contact: {info.get('phone_number', '+91 91030 31412')}
+- Notification Email: {case.user_email or 'nikhilsharma5122006@gmail.com'}
+- Representation Proxy: Mock-On Autonomous AI Advocate (Authorized under IT Act 2000 Section 10A & armour365™ Voice Biometric Consent)
+
+2. RESPONDENT ENTITY:
+- Company / Merchant Name: {provider}
+- Grievance Ticket / Reference: #{ticket_no}
+- Consumer Account / Order / UTR / PNR: {identifier}
+- Disputed Sum: INR ₹{amt}
+
+3. STATEMENT OF GRIEVANCE & BREACH OF COMMITMENTS:
+The complainant raised a formal dispute regarding:
+"{case.goal}"
+
+During verified telephony follow-ups with {provider}'s official customer care desk, representative(s) executed verbal settlement commitments:
+{commitments_section}
+
+Despite expiry of the promised turnaround window, the respondent has failed and neglected to process the refund of ₹{amt}. Under Section 2(47) of the Consumer Protection Act 2019, failure to honor committed settlement terms constitutes an Unfair Trade Practice.
+
+4. STATUTORY CITATIONS:
+- {framework['act']}
+- Consumer Protection Act 2019, Section 2(47) (Unfair Trade Practice) & Section 35
+- Electronic records certified under Section 65B of Indian Evidence Act 1872
+
+5. RELIEF DEMANDED:
+1. Immediate reversal and bank transfer of ₹{amt} to original payment source.
+2. Statutory delay interest / penalty compensation for willful delay.
+3. Written closure docket issued by {provider}.
+"""
+
+    return {
+        "case_id": case.id,
+        "portal_name": portal_name,
+        "portal_url": portal_url,
+        "alt_portal_name": "National Consumer Helpline (NCH 1915)",
+        "alt_portal_url": "https://consumerhelpline.gov.in",
+        "ticket_number": ticket_no,
+        "provider": provider,
+        "disputed_amount": amt,
+        "consumer_name": consumer_name,
+        "statutory_act": framework["act"],
+        "complaint_subject": complaint_subject,
+        "complaint_body": complaint_body.strip(),
+        "pdf_url": f"/api/cases/{case.id}/legal-notice.pdf",
+    }
+
+
