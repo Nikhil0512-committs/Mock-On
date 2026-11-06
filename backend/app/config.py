@@ -75,8 +75,20 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 10080
 
     # Application URLs
-    frontend_url: str = "http://localhost:5173"
-    backend_url: str = "http://localhost:8000"
+    frontend_url: str = "https://mock-on.vercel.app"
+    backend_url: str = "https://mock-on-backend.onrender.com"
+
+    @property
+    def public_frontend_url(self) -> str:
+        if self.app_env == "development" and "localhost" in self.frontend_url:
+            return self.frontend_url
+        return self.frontend_url or "https://mock-on.vercel.app"
+
+    @property
+    def public_backend_url(self) -> str:
+        if self.app_env == "development" and "localhost" in self.backend_url:
+            return self.backend_url
+        return self.backend_url or "https://mock-on-backend.onrender.com"
 
     # Twilio Live Telephony Bridge
     twilio_account_sid: str = Field(default="")

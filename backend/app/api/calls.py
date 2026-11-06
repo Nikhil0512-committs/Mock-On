@@ -134,7 +134,12 @@ async def start_call(payload: CallCreate, db: AsyncSession = Depends(get_db)):
         })
 
         # Send call dispatch confirmation email to consumer
-        user_email = case.user_email or (case.approved_info or {}).get("contact_email")
+        user_email = (
+            case.user_email
+            or (case.owner_id if "@" in (case.owner_id or "") else None)
+            or (case.approved_info or {}).get("contact_email")
+            or (case.approved_info or {}).get("email")
+        )
         if user_email:
             info = case.approved_info or {}
             asyncio.create_task(email_service.send_call_dispatched(
@@ -380,7 +385,12 @@ async def send_call_message(
 
                 # If representative refused, dispatch an immediate statutory notice email to consumer
                 if is_refusal and case:
-                    user_email = case.user_email or (case.approved_info or {}).get("contact_email")
+                    user_email = (
+                        case.user_email
+                        or (case.owner_id if "@" in (case.owner_id or "") else None)
+                        or (case.approved_info or {}).get("contact_email")
+                        or (case.approved_info or {}).get("email")
+                    )
                     if user_email:
                         asyncio.create_task(email_service.send_refusal_notice(
                             to_email=user_email,
@@ -507,7 +517,12 @@ async def end_call(
 
     # Dispatch appropriate notification email to user
     if case:
-        user_email = case.user_email or (case.approved_info or {}).get("contact_email")
+        user_email = (
+            case.user_email
+            or (case.owner_id if "@" in (case.owner_id or "") else None)
+            or (case.approved_info or {}).get("contact_email")
+            or (case.approved_info or {}).get("email")
+        )
         if user_email:
             ticket_number = info.get("ticket_number") or "TKT-2026-78432"
             amt_str = f"₹{info.get('disputed_amount', '8,500')}"

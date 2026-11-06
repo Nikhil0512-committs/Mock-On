@@ -136,7 +136,13 @@ async def resend_summary(case_id: str, db: AsyncSession = Depends(get_db)):
     case = result.scalar_one_or_none()
     if not case:
         raise HTTPException(404, "Case not found")
-    if not case.user_email:
+    target_email = (
+        case.user_email
+        or (case.owner_id if "@" in (case.owner_id or "") else None)
+        or (case.approved_info or {}).get("contact_email")
+        or (case.approved_info or {}).get("email")
+    )
+    if not target_email:
         raise HTTPException(400, "Case does not have an attached user email")
 
     p_res = await db.execute(select(Promise).where(Promise.case_id == case.id))
@@ -162,7 +168,7 @@ async def resend_summary(case_id: str, db: AsyncSession = Depends(get_db)):
     if not p_list:
         # Inconclusive call notice
         sent = await email_service.send_inconclusive_call_notice(
-            to_email=case.user_email,
+            to_email=target_email,
             case_id=case.id,
             provider=provider,
             ticket_number=ticket,
@@ -170,10 +176,11 @@ async def resend_summary(case_id: str, db: AsyncSession = Depends(get_db)):
             reason="Call ended midway before a resolution or refund commitment was confirmed.",
             identifier_label=id_label,
             identifier_val=id_val,
+            force=True,
         )
     else:
         sent = await email_service.send_call_summary(
-            to_email=case.user_email,
+            to_email=target_email,
             case_id=case.id,
             provider=provider,
             phone_number=phone,
@@ -184,8 +191,9 @@ async def resend_summary(case_id: str, db: AsyncSession = Depends(get_db)):
             identifier_label=id_label,
             identifier_val=id_val,
             domain=domain,
+            force=True,
         )
-    return {"ok": sent, "email": case.user_email, "has_conclusion": bool(p_list)}
+    return {"ok": sent, "email": target_email, "has_conclusion": bool(p_list)}
 
 
 

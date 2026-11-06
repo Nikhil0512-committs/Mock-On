@@ -42,7 +42,6 @@ class EmailService:
     def _send_sync(self, to_email: str, subject: str, html_body: str, text_body: Optional[str] = None) -> bool:
         """Synchronous SMTP sender run in background thread with automatic retries and port fallback."""
         import ssl
-        import time
 
         msg = EmailMessage()
         msg["Subject"] = subject
@@ -55,51 +54,35 @@ class EmailService:
         else:
             msg.set_content(html_body, subtype="html")
 
-        # Retry loop for resilience against transient socket drops
+        # Try Port 465 (Direct SSL) first, then Port 587 (STARTTLS)
+        preferred_port = self.port if self.port in (465, 587) else 465
+        ports = [preferred_port, 587 if preferred_port == 465 else 465]
+
         last_exc = None
-        for attempt in range(1, 4):
+        for current_port in ports:
             try:
                 ctx = ssl.create_default_context()
-                if self.port == 465:
-                    with smtplib.SMTP_SSL(self.host, self.port, context=ctx, timeout=20) as server:
+                if current_port == 465:
+                    with smtplib.SMTP_SSL(self.host, 465, context=ctx, timeout=15) as server:
                         if self.user and self.password:
                             server.login(self.user, self.password)
                         server.send_message(msg)
                     return True
                 else:
-                    with smtplib.SMTP(self.host, self.port, timeout=20) as server:
-                        if self.port == 587:
-                            server.starttls(context=ctx)
+                    with smtplib.SMTP(self.host, 587, timeout=15) as server:
+                        server.starttls(context=ctx)
                         if self.user and self.password:
                             server.login(self.user, self.password)
                         server.send_message(msg)
                     return True
             except Exception as e:
                 last_exc = e
-                logger.warning(f"SMTP dispatch attempt {attempt} failed: {e}")
-                time.sleep(1.5)
+                logger.warning(f"SMTP dispatch on port {current_port} failed: {e}. Trying alternate port...")
 
-        # Fallback to alternate port if primary fails
-        alt_port = 587 if self.port == 465 else 465
-        try:
-            logger.info(f"Attempting SMTP fallback to port {alt_port}...")
-            ctx = ssl.create_default_context()
-            if alt_port == 465:
-                with smtplib.SMTP_SSL(self.host, 465, context=ctx, timeout=20) as server:
-                    if self.user and self.password:
-                        server.login(self.user, self.password)
-                    server.send_message(msg)
-                return True
-            else:
-                with smtplib.SMTP(self.host, 587, timeout=20) as server:
-                    server.starttls(context=ctx)
-                    if self.user and self.password:
-                        server.login(self.user, self.password)
-                    server.send_message(msg)
-                return True
-        except Exception as fb_err:
-            logger.error(f"Fallback to port {alt_port} failed: {fb_err}")
-            raise last_exc or fb_err
+        if last_exc:
+            logger.error(f"All SMTP dispatch attempts failed: {last_exc}")
+            raise last_exc
+        return False
 
     async def _send(self, to_email: str, subject: str, html_body: str, text_body: Optional[str] = None) -> bool:
         """Internal helper to dispatch an HTML email via SMTP."""
@@ -132,12 +115,13 @@ class EmailService:
         identifier_label: str = "Reference",
         identifier_val: str = None,
         domain: str = "telecom",
+        force: bool = False,
     ) -> bool:
         """Send post-call summary with extracted commitments, ticket details, and domain context."""
-        if self._is_duplicate(f"summary:{to_email}:{case_id}:{ticket_number}", cooldown_seconds=600):
+        if not force and self._is_duplicate(f"summary:{to_email}:{case_id}:{ticket_number}", cooldown_seconds=600):
             return True
         subject = f"[Mock-On] Case Summary: Dispute with {provider} (Ticket #{ticket_number})"
-        case_url = f"{settings.frontend_url}/ledger/{case_id}"
+        case_url = f"{settings.public_frontend_url}/ledger/{case_id}"
 
         id_disp = f"{identifier_label} ({identifier_val})" if identifier_val else f"phone number {phone_number}"
         id_detail_val = identifier_val or phone_number
@@ -273,9 +257,9 @@ class EmailService:
         subject = f"[Action Required] Did you receive your {amount_str} refund from {provider}?"
         
         # Clickable action URLs handled by backend resolution endpoint
-        yes_url = f"{settings.backend_url}/resolution/respond?id={promise_id}&action=received"
-        no_url = f"{settings.backend_url}/resolution/respond?id={promise_id}&action=not_received"
-        case_url = f"{settings.frontend_url}/ledger/{case_id}"
+        yes_url = f"{settings.public_backend_url}/resolution/respond?id={promise_id}&action=received"
+        no_url = f"{settings.public_backend_url}/resolution/respond?id={promise_id}&action=not_received"
+        case_url = f"{settings.public_frontend_url}/ledger/{case_id}"
 
         if domain == "ecommerce":
             next_action_text = f"Mock-On will automatically schedule an automated follow-up call with {provider} referencing your ticket number, and prepare your National Consumer Helpline (NCH - 1915) & E-Daakhil consumer petition."
@@ -364,11 +348,12 @@ class EmailService:
         provider: str,
         action: str,  # 'received' or 'not_received'
         ticket_number: str = "Dispute Reference",
+        force: bool = False,
     ) -> bool:
         """Send confirmation of the user's Yes/No selection."""
-        if self._is_duplicate(f"res_update:{to_email}:{case_id}:{action}", cooldown_seconds=300):
+        if not force and self._is_duplicate(f"res_update:{to_email}:{case_id}:{action}", cooldown_seconds=300):
             return True
-        case_url = f"{settings.frontend_url}/ledger/{case_id}"
+        case_url = f"{settings.public_frontend_url}/ledger/{case_id}"
         if action == "received":
             subject = f"[Mock-On] Case Resolved: {provider} Ticket #{ticket_number} Closed"
             msg = f"We have updated your case to <strong>Fulfilled</strong>. Thank you for using Mock-On!"
@@ -422,12 +407,13 @@ class EmailService:
         amount_str: str = "Disputed Sum",
         ticket_number: str = "Pending Docket",
         goal: str = "Dispute billing charges",
+        force: bool = False,
     ) -> bool:
         """Send notification when an AI Advocate call has been dispatched."""
-        if self._is_duplicate(f"dispatched:{to_email}:{case_id}:{ticket_number}", cooldown_seconds=300):
+        if not force and self._is_duplicate(f"dispatched:{to_email}:{case_id}:{ticket_number}", cooldown_seconds=300):
             return True
         subject = f"[Mock-On] Call Dispatched: AI Advocate contacting {provider} (Docket #{ticket_number})"
-        case_url = f"{settings.frontend_url}/call"
+        case_url = f"{settings.public_frontend_url}/call"
 
         html_body = f"""
         <!DOCTYPE html>
@@ -484,12 +470,13 @@ class EmailService:
         amount_str: str,
         ticket_number: str,
         rep_statement: str,
+        force: bool = False,
     ) -> bool:
         """Send notification when a company representative refuses resolution, initiating escalation."""
-        if self._is_duplicate(f"refusal:{to_email}:{case_id}:{ticket_number}", cooldown_seconds=1800):
+        if not force and self._is_duplicate(f"refusal:{to_email}:{case_id}:{ticket_number}", cooldown_seconds=1800):
             return True
         subject = f"[Mock-On] Statutory Notice: {provider} Refused Settlement (Ticket #{ticket_number})"
-        case_url = f"{settings.frontend_url}/ledger/{case_id}"
+        case_url = f"{settings.public_frontend_url}/ledger/{case_id}"
 
         html_body = f"""
         <!DOCTYPE html>
@@ -548,16 +535,17 @@ class EmailService:
         reason: str = "Call disconnected midway before a resolution or refund commitment was confirmed.",
         identifier_label: str = "Reference",
         identifier_val: str = "Account Identifier",
+        force: bool = False,
     ) -> bool:
         """
         Send notification when a live advocacy call ends midway without reaching any conclusion or commitment.
         Updates the user clearly with the exact reason and actionable next steps (redial or escalate).
         """
-        if self._is_duplicate(f"inconclusive:{to_email}:{case_id}:{ticket_number}", cooldown_seconds=600):
+        if not force and self._is_duplicate(f"inconclusive:{to_email}:{case_id}:{ticket_number}", cooldown_seconds=600):
             return True
         subject = f"[Mock-On Notice] Call Inconclusive: Dispute with {provider} (Ticket #{ticket_number})"
-        case_url = f"{settings.frontend_url}/ledger/{case_id}"
-        redial_url = f"{settings.frontend_url}/"
+        case_url = f"{settings.public_frontend_url}/ledger/{case_id}"
+        redial_url = f"{settings.public_frontend_url}/"
 
         html_body = f"""
         <!DOCTYPE html>

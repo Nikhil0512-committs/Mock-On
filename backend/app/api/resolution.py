@@ -258,7 +258,7 @@ async def handle_resolution_response(
                 badge_variant="amber",
                 heading="Dispute Record Not Found",
                 message="This verification link may have expired or references an archived dispute docket.",
-                action_url=f"{settings.frontend_url}/ledger",
+                action_url=f"{settings.public_frontend_url}/ledger",
                 action_text="Return to Dispute Ledger",
                 status_code=404,
             )
@@ -272,8 +272,13 @@ async def handle_resolution_response(
         info = case.approved_info if case and case.approved_info else {}
         provider = info.get("service_provider", "Customer Support")
         domain = (info.get("domain") or "telecom").lower()
-        user_email = case.user_email if case else None
-        case_url = f"{settings.frontend_url}/ledger/{promise.case_id}" if promise.case_id else f"{settings.frontend_url}/ledger"
+        user_email = (
+            (case.user_email if case else None)
+            or (case.owner_id if case and "@" in (case.owner_id or "") else None)
+            or ((case.approved_info or {}).get("contact_email") if case else None)
+            or ((case.approved_info or {}).get("email") if case else None)
+        )
+        case_url = f"{settings.public_frontend_url}/ledger/{promise.case_id}" if promise.case_id else f"{settings.public_frontend_url}/ledger"
         amount_str = f"₹{promise.amount}" if promise.amount else f"₹{info.get('disputed_amount', '1000')}"
         ticket_no = (
             getattr(promise, "ticket_number", None)
@@ -450,7 +455,7 @@ async def handle_resolution_response(
                     )
                 )
 
-            call_url = f"{settings.frontend_url}/call"
+            call_url = f"{settings.public_frontend_url}/call"
 
             details_box = f"""
             <div class="box">
@@ -500,7 +505,7 @@ async def handle_resolution_response(
             badge_variant="amber",
             heading="Dispute Update Received",
             message="Your response was registered. If the ledger status has not updated yet, you can review and manage your case directly from the dashboard.",
-            action_url=f"{settings.frontend_url}/ledger",
+            action_url=f"{settings.public_frontend_url}/ledger",
             action_text="Open Dispute Ledger",
             status_code=200,
         )

@@ -311,10 +311,17 @@ class CallOrchestrator:
                     "status": "resolved" if has_conclusion else "inconclusive",
                 })
 
-                if case and case.user_email:
+                target_email = (
+                    (case.user_email if case else None)
+                    or (case.owner_id if case and "@" in (case.owner_id or "") else None)
+                    or ((case.approved_info or {}).get("contact_email") if case else None)
+                    or ((case.approved_info or {}).get("email") if case else None)
+                )
+
+                if case and target_email:
                     if not has_conclusion:
                         await email_service.send_inconclusive_call_notice(
-                            to_email=case.user_email,
+                            to_email=target_email,
                             case_id=self.case_id,
                             provider=provider,
                             ticket_number=ticket_no,
@@ -323,10 +330,10 @@ class CallOrchestrator:
                             identifier_label=id_label,
                             identifier_val=id_val,
                         )
-                        logger.info(f"Inconclusive call email sent to {case.user_email} for case {self.case_id}")
+                        logger.info(f"Inconclusive call email sent to {target_email} for case {self.case_id}")
                     else:
                         await email_service.send_call_summary(
-                            to_email=case.user_email,
+                            to_email=target_email,
                             case_id=self.case_id,
                             provider=provider,
                             phone_number=phone,
@@ -338,7 +345,7 @@ class CallOrchestrator:
                             identifier_val=id_val,
                             domain=domain,
                         )
-                        logger.info(f"Post-call summary email sent to {case.user_email} for case {self.case_id}")
+                        logger.info(f"Post-call summary email sent to {target_email} for case {self.case_id}")
         except Exception as mail_err:
             logger.error(f"Failed to complete end-call processing: {mail_err}", exc_info=True)
             await self._emit("call_ended", {"call_id": self.call_id, "has_conclusion": False})

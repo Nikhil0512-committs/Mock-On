@@ -107,7 +107,13 @@ class DeadlineWorker:
                         from app.services.email import email_service
                         c_res = await db.execute(select(Case).where(Case.id == p.case_id))
                         case = c_res.scalar_one_or_none()
-                        if case and case.user_email:
+                        target_email = (
+                            (case.user_email if case else None)
+                            or (case.owner_id if case and "@" in (case.owner_id or "") else None)
+                            or ((case.approved_info or {}).get("contact_email") if case else None)
+                            or ((case.approved_info or {}).get("email") if case else None)
+                        )
+                        if case and target_email:
                             provider = case.approved_info.get("service_provider", "Customer Support") if case.approved_info else "Customer Support"
                             amt_val = p.amount or (case.approved_info.get("disputed_amount") if case.approved_info else None)
                             amt_str = f"₹{amt_val}" if amt_val else "agreed sum"
@@ -122,7 +128,7 @@ class DeadlineWorker:
                                 or "agreed resolution timeline"
                             )
                             await email_service.send_deadline_checkin(
-                                to_email=case.user_email,
+                                to_email=target_email,
                                 case_id=p.case_id,
                                 promise_id=p.id,
                                 provider=provider,
@@ -279,10 +285,16 @@ class DeadlineWorker:
             logger.warning(f"Failed to broadcast follow-up call to switchboard: {b_err}")
 
         # Send dispatch notification email to user
-        if case and case.user_email:
+        target_dispatch_email = (
+            (case.user_email if case else None)
+            or (case.owner_id if case and "@" in (case.owner_id or "") else None)
+            or ((case.approved_info or {}).get("contact_email") if case else None)
+            or ((case.approved_info or {}).get("email") if case else None)
+        )
+        if case and target_dispatch_email:
             try:
                 await email_service.send_call_dispatched(
-                    to_email=case.user_email,
+                    to_email=target_dispatch_email,
                     case_id=promise.case_id,
                     provider=provider,
                     identifier_label=id_label,
