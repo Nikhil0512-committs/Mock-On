@@ -468,17 +468,18 @@ export default function CallPage() {
                   <span>armour365™ Proxy</span>
                 </span>
               )}
-              <span className="text-brand-300 text-[11px] font-medium hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-brand-500/10 border border-brand-500/20">
+              <span className="text-brand-300 text-[11px] font-medium hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-brand-500/10 border border-brand-500/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
                 <span>
-                  🗣️{" "}
+                  Voice: Shivani &bull;{" "}
                   {activeCase?.language === "ta-en"
                     ? "Tanglish"
                     : activeCase?.language === "kn-en"
                     ? "Kannada-EN"
                     : activeCase?.language === "en-IN"
-                    ? "English"
+                    ? "Indian English"
                     : activeCase?.language === "hi-IN"
-                    ? "Hindi"
+                    ? "Shuddh Hindi"
                     : "Hinglish"}
                 </span>
               </span>

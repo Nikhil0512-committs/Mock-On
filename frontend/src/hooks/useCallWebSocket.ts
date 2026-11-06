@@ -122,15 +122,8 @@ export function useCallWebSocket(callId: string | null) {
             sequence: Date.now(),
           };
           appendUtterance(u);
-          if (event.data.audio_b64) {
+          if (event.data.audio_b64 && !isAudioMuted) {
             audioQueue.enqueue(event.data.audio_b64 as string);
-          } else if (typeof window !== "undefined" && "speechSynthesis" in window && !isAudioMuted && text) {
-            try {
-              const utter = new SpeechSynthesisUtterance(text);
-              utter.rate = 1.0;
-              utter.pitch = 1.1;
-              window.speechSynthesis.speak(utter);
-            } catch {}
           }
           break;
         }
@@ -148,15 +141,32 @@ export function useCallWebSocket(callId: string | null) {
             sequence: (event.data.sequence as number) || Date.now(),
           };
           appendUtterance(u);
-          if (event.data.audio_b64) {
-            audioQueue.enqueue(event.data.audio_b64 as string);
-          } else if (typeof window !== "undefined" && "speechSynthesis" in window && !isAudioMuted && text) {
-            try {
-              const utter = new SpeechSynthesisUtterance(text);
-              utter.rate = 1.05;
-              utter.pitch = speaker === "agent" ? 1.05 : 0.95;
-              window.speechSynthesis.speak(utter);
-            } catch {}
+          // ONLY play audio for Shivani / AI Advocate (speaker === "user").
+          // Company representative speech is human/switchboard voice and must NEVER be voice-read by our AI!
+          if (speaker === "user" && !isAudioMuted) {
+            if (event.data.audio_b64) {
+              audioQueue.enqueue(event.data.audio_b64 as string);
+            } else if (typeof window !== "undefined" && "speechSynthesis" in window && text) {
+              try {
+                const utter = new SpeechSynthesisUtterance(text);
+                utter.rate = 1.0;
+                utter.pitch = 1.15; // Feminine pitch for Shivani
+                const voices = window.speechSynthesis.getVoices();
+                const femaleVoice =
+                  voices.find(
+                    (v) =>
+                      (v.lang.includes("en-IN") || v.lang.includes("hi") || v.lang.includes("en")) &&
+                      (v.name.toLowerCase().includes("female") ||
+                        v.name.toLowerCase().includes("swara") ||
+                        v.name.toLowerCase().includes("heera") ||
+                        v.name.toLowerCase().includes("zira") ||
+                        v.name.toLowerCase().includes("google") ||
+                        v.name.toLowerCase().includes("natural"))
+                  ) || voices.find((v) => v.name.toLowerCase().includes("female"));
+                if (femaleVoice) utter.voice = femaleVoice;
+                window.speechSynthesis.speak(utter);
+              } catch {}
+            }
           }
           break;
         }

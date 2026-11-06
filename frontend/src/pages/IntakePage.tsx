@@ -60,7 +60,7 @@ const LANGUAGES = [
     region: "National / Formal",
     native: "English",
     tag: "Appellate",
-    sample: '"The refund of Rs {amt} has not been credited. SLA has lapsed under statutory guidelines."',
+    sample: '"My refund has not been credited yet. The statutory SLA turnaround time has lapsed."',
   },
   {
     code: "hi-IN",
@@ -68,7 +68,7 @@ const LANGUAGES = [
     region: "Standard Desk",
     native: "मानक हिंदी",
     tag: "Standard",
-    sample: '"Humara refund abhi tak prapt nahi hua hai, kripya tatkaal reversal process karein."',
+    sample: '"Hamara refund abhi tak prapt nahi hua hai, kripya tatkaal process karein."',
   },
 ];
 
@@ -433,7 +433,20 @@ export default function IntakePage() {
         window.speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(text);
         u.rate = 1.0;
-        u.pitch = 1.0;
+        u.pitch = 1.15; // Feminine pitch for Shivani
+        const voices = window.speechSynthesis.getVoices();
+        const femaleVoice =
+          voices.find(
+            (v) =>
+              (v.lang.includes("en-IN") || v.lang.includes("hi") || v.lang.includes("en")) &&
+              (v.name.toLowerCase().includes("female") ||
+                v.name.toLowerCase().includes("swara") ||
+                v.name.toLowerCase().includes("heera") ||
+                v.name.toLowerCase().includes("zira") ||
+                v.name.toLowerCase().includes("google") ||
+                v.name.toLowerCase().includes("natural"))
+          ) || voices.find((v) => v.name.toLowerCase().includes("female"));
+        if (femaleVoice) u.voice = femaleVoice;
         u.onend = () => setIsPlayingVoiceToken(false);
         u.onerror = () => setIsPlayingVoiceToken(false);
         window.speechSynthesis.speak(u);
@@ -958,11 +971,16 @@ export default function IntakePage() {
 
           {/* 3. Indic Regional Dialect & Persona */}
           <div className="space-y-3 pt-4 border-t border-white/[0.06]">
-            <div className="flex items-center justify-between">
-              <label className="text-[11px] font-bold text-white/50 uppercase tracking-wider block">
-                3. Indic Regional Dialect &amp; Voice Persona
-              </label>
-              <span className="text-[10px] font-mono text-brand-300 bg-brand-500/10 px-2 py-0.5 rounded border border-brand-500/20">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+              <div className="flex items-center gap-2">
+                <label className="text-[11px] font-bold text-white/50 uppercase tracking-wider block">
+                  3. Indic Regional Dialect &amp; Voice Persona
+                </label>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                  Voice: Shivani (Female)
+                </span>
+              </div>
+              <span className="text-[10px] font-mono text-brand-300 bg-brand-500/10 px-2 py-0.5 rounded border border-brand-500/20 self-start sm:self-auto">
                 Powered by Gnani Indic Speech
               </span>
             </div>

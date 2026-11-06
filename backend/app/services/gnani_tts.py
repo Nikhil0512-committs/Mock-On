@@ -52,8 +52,8 @@ class TimbreTTSAdapter:
         self.rest_url = settings.gnani_tts_rest_url
         self.api_key = settings.gnani_api_key
         self.model = settings.gnani_tts_model
-        self.voice = settings.gnani_tts_voice
-        self.language = settings.gnani_tts_language
+        self.voice = "Shivani"  # Dedicated female voice for AI Personal Assistant Shivani
+        self.language = settings.gnani_tts_language or "hi-en"
         self.speed = settings.gnani_tts_speed
         self.audio_cache = _AUDIO_CACHE
 

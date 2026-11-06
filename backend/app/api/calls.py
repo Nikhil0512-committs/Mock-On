@@ -419,7 +419,9 @@ async def send_call_message(
                     async with _call_advocate_locks[call_id]:
                         # Natural 120ms conversational turn pause (ultra-low latency)
                         await asyncio.sleep(0.12)
-                        info = (case.approved_info or {}) if case else {}
+                        info = dict(case.approved_info or {}) if case else {}
+                        if case and case.language:
+                            info["language"] = case.language
                         amt = info.get("disputed_amount") or "8,500"
                         goal_text = case.goal if case else "Dispute provisional meter billing excess"
 

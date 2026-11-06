@@ -467,12 +467,18 @@ class SarvamExtractor:
                 break
 
         lower_rep = rep_latest_text.lower()
-        is_hindi = any(w in lower_rep for w in [
-            "namaste", "swagat", "sahayata", "bhasha", "madad", "kaise", "boliye",
-            "aapka", "karein", "hindi", "theek", "batayein", "kripya", "dhanyawad",
-            "dikkat", "pareshani", "kya", "shubh", "shukriya", "dabaen", "dabayein",
-            "ek", "do", "naam", "bataye", "rukiye", "kahiye", "sun", "sunie"
-        ])
+        lang_mode = str(case_info.get("language") or "hi-en").lower()
+        if lang_mode in ["en-in", "en"]:
+            is_hindi = False
+        elif lang_mode in ["hi-in", "hi"]:
+            is_hindi = True
+        else:
+            is_hindi = any(w in lower_rep for w in [
+                "namaste", "swagat", "sahayata", "bhasha", "madad", "kaise", "boliye",
+                "aapka", "karein", "hindi", "theek", "batayein", "kripya", "dhanyawad",
+                "dikkat", "pareshani", "kya", "shubh", "shukriya", "dabaen", "dabayein",
+                "ek", "do", "naam", "bataye", "rukiye", "kahiye", "sun", "sunie"
+            ]) or (lang_mode == "hi-en")
 
         system_instruction = (
             f"You are Shivani, consumer {consumer_name}'s female AI Personal Assistant representing {consumer_name} on a live 2-way phone call with {provider} customer support.\n"
