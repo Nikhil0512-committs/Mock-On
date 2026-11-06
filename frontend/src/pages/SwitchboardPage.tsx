@@ -23,10 +23,47 @@ import { callsApi, WS_BASE, type SwitchboardPendingItem } from "../lib/api";
 import { useStore } from "../store";
 import type { LiveUtterance } from "../types";
 
+export function deduplicateConsecutivePhrases(text: string): string {
+  if (!text) return "";
+  let words = text.trim().split(/\s+/);
+  if (words.length < 2) return text.trim();
+
+  const maxWindow = Math.min(Math.floor(words.length / 2), 30);
+  for (let pass = 0; pass < 3; pass++) {
+    for (let window = maxWindow; window >= 1; window--) {
+      const cleaned: string[] = [];
+      let i = 0;
+      while (i < words.length) {
+        if (i + window * 2 <= words.length) {
+          const p1 = words.slice(i, i + window).map((w) => w.toLowerCase()).join(" ");
+          const p2 = words.slice(i + window, i + window * 2).map((w) => w.toLowerCase()).join(" ");
+          if (p1 === p2) {
+            cleaned.push(...words.slice(i, i + window));
+            i += window * 2;
+            while (
+              i + window <= words.length &&
+              words.slice(i, i + window).map((w) => w.toLowerCase()).join(" ") === p1
+            ) {
+              i += window;
+            }
+            continue;
+          }
+        }
+        cleaned.push(words[i]);
+        i++;
+      }
+      words = cleaned;
+    }
+  }
+
+  return words.join(" ");
+}
+
 class SequentialAudioQueue {
   private queue: string[] = [];
-  private isPlaying = false;
+  public isPlaying = false;
   private currentAudio: HTMLAudioElement | null = null;
+  public onStateChange: ((playing: boolean) => void) | null = null;
 
   enqueue(audioB64: string) {
     this.queue.push(audioB64);
@@ -45,12 +82,14 @@ class SequentialAudioQueue {
     }
     this.queue = [];
     this.isPlaying = false;
+    this.onStateChange?.(false);
   }
 
   private playNext() {
     if (this.queue.length === 0) {
       this.isPlaying = false;
       this.currentAudio = null;
+      this.onStateChange?.(false);
       return;
     }
 
@@ -62,6 +101,7 @@ class SequentialAudioQueue {
 
     try {
       this.isPlaying = true;
+      this.onStateChange?.(true);
       const audio = new Audio("data:audio/wav;base64," + nextB64);
       this.currentAudio = audio;
 
@@ -102,19 +142,69 @@ export default function SwitchboardPage() {
     "Representative disconnected midway before settlement could be confirmed"
   );
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isAdvocateSpeaking, setIsAdvocateSpeaking] = useState(false);
   const silenceTimerRef = useRef<any>(null);
   const restartTimeoutRef = useRef<any>(null);
   const recognitionRef = useRef<any>(null);
   const isListeningRef = useRef(false);
+  const accumulatedTurnTextRef = useRef<string>("");
   const lastSentTextRef = useRef<string>("");
   const lastSentTimeRef = useRef<number>(0);
   const wsRef = useRef<WebSocket | null>(null);
   const transcriptBottomRef = useRef<HTMLDivElement>(null);
 
+  // Sync with audio queue state to mute microphone input while AI advocate speaks
+  useEffect(() => {
+    switchboardAudioQueue.onStateChange = (playing) => {
+      setIsAdvocateSpeaking(playing);
+      if (playing) {
+        // AI advocate audio is outputting through speakers:
+        // Teardown speech recognition immediately so the mic does not pick up speaker audio
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
+        if (recognitionRef.current) {
+          try {
+            recognitionRef.current.onresult = null;
+            recognitionRef.current.onerror = null;
+            recognitionRef.current.onend = null;
+            recognitionRef.current.stop();
+          } catch (_) {}
+          recognitionRef.current = null;
+        }
+        setIsSpeaking(false);
+        accumulatedTurnTextRef.current = "";
+      } else {
+        // Advocate finished speaking: wait 500ms for room echo to decay, then restart mic if enabled
+        if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
+        restartTimeoutRef.current = setTimeout(() => {
+          if (isListeningRef.current && !switchboardAudioQueue.isPlaying) {
+            accumulatedTurnTextRef.current = "";
+            startRecognition();
+          }
+        }, 500);
+      }
+    };
+    return () => {
+      switchboardAudioQueue.onStateChange = null;
+    };
+  }, []);
+
   const startRecognition = () => {
+    if (switchboardAudioQueue.isPlaying) return;
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) return;
+
+    // Teardown any existing instance first to guarantee only ONE listener is active
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.onresult = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.onend = null;
+        recognitionRef.current.stop();
+      } catch (_) {}
+      recognitionRef.current = null;
+    }
 
     try {
       const recognition = new SpeechRecognition();
@@ -123,45 +213,43 @@ export default function SwitchboardPage() {
       recognition.lang = "en-IN";
 
       recognition.onresult = (event: any) => {
-        let finalChunk = "";
-        let interimChunk = "";
+        // Echo cancellation: if AI Advocate is speaking through speakers, ignore
+        if (switchboardAudioQueue.isPlaying) {
+          return;
+        }
 
-        for (let i = 0; i < event.results.length; ++i) {
+        let interim = "";
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
           const res = event.results[i];
           if (res.isFinal) {
-            finalChunk += res[0].transcript + " ";
+            accumulatedTurnTextRef.current += (accumulatedTurnTextRef.current ? " " : "") + res[0].transcript.trim();
           } else {
-            interimChunk += res[0].transcript;
+            interim += res[0].transcript;
           }
         }
 
-        const fullCandidate = (finalChunk + interimChunk).trim();
-        if (fullCandidate) {
-          setMessageInput(fullCandidate);
+        const rawCombined = (accumulatedTurnTextRef.current + " " + interim).trim();
+        const clean = deduplicateConsecutivePhrases(rawCombined);
+
+        if (clean) {
+          setMessageInput(clean);
           setIsSpeaking(true);
         }
 
-        // Production-level continuous speech debounce:
-        // When speaker pauses for 1100ms, auto-dispatch the turn and cleanly flush the session
-        if (autoSendVoice && fullCandidate.length >= 2) {
+        // Auto-send debounce after 1200ms of natural silence
+        if (autoSendVoice && clean.length >= 2) {
           if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
           silenceTimerRef.current = setTimeout(() => {
             setIsSpeaking(false);
-            const candidate = fullCandidate.trim();
-            if (candidate.length >= 2) {
-              setMessageInput("");
-              handleSendMessage(candidate);
-              // Cleanly restart the recognition session to flush results buffer
-              try {
-                recognition.abort();
-              } catch (_) {}
+            const toSend = clean.trim();
+            if (toSend.length >= 2) {
+              handleSendMessage(toSend);
             }
-          }, 1100);
+          }, 1200);
         }
       };
 
       recognition.onerror = (event: any) => {
-        // Non-fatal continuous events: ignore 'no-speech' and intentional 'aborted'
         if (event.error === "no-speech" || event.error === "aborted") {
           return;
         }
@@ -172,27 +260,28 @@ export default function SwitchboardPage() {
           alert("Microphone permission was denied. Please allow microphone access in your browser settings.");
           return;
         }
-        if (isListeningRef.current) {
+        if (isListeningRef.current && !switchboardAudioQueue.isPlaying) {
           if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
           restartTimeoutRef.current = setTimeout(() => {
-            if (isListeningRef.current) startRecognition();
+            if (isListeningRef.current && !switchboardAudioQueue.isPlaying) startRecognition();
           }, 250);
         }
       };
 
       recognition.onend = () => {
         setIsSpeaking(false);
-        if (isListeningRef.current) {
+        if (isListeningRef.current && !switchboardAudioQueue.isPlaying) {
           if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
           restartTimeoutRef.current = setTimeout(() => {
-            if (isListeningRef.current) startRecognition();
-          }, 80);
+            if (isListeningRef.current && !switchboardAudioQueue.isPlaying) startRecognition();
+          }, 100);
         }
       };
 
       recognition.start();
       recognitionRef.current = recognition;
     } catch (e) {
+      console.warn("Recognition start failed:", e);
       setIsListening(false);
       isListeningRef.current = false;
       setIsSpeaking(false);
@@ -206,13 +295,20 @@ export default function SwitchboardPage() {
       setIsSpeaking(false);
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
-      try {
-        recognitionRef.current?.abort();
-      } catch (_) {}
-      if (messageInput.trim()) {
-        const candidate = messageInput.trim();
-        setMessageInput("");
-        handleSendMessage(candidate);
+
+      const pending = (messageInput || accumulatedTurnTextRef.current).trim();
+      if (pending) {
+        handleSendMessage(pending);
+      }
+
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.onresult = null;
+          recognitionRef.current.onerror = null;
+          recognitionRef.current.onend = null;
+          recognitionRef.current.stop();
+        } catch (_) {}
+        recognitionRef.current = null;
       }
       return;
     }
@@ -226,6 +322,7 @@ export default function SwitchboardPage() {
 
     isListeningRef.current = true;
     setIsListening(true);
+    accumulatedTurnTextRef.current = "";
     startRecognition();
   };
 
@@ -275,12 +372,26 @@ export default function SwitchboardPage() {
             if (raw.id && prev.some((u) => u.id === raw.id)) {
               return prev;
             }
+            // Guard: In a live 2-way call, AI Advocate ('user') should never send two consecutive turns.
+            // If the last utterance is already from 'user' and new utterance is also from 'user',
+            // update/replace the last turn rather than stacking a duplicate introduction!
+            if (speaker === "user" && last && last.speaker === "user") {
+              const updated = [...prev];
+              updated[updated.length - 1] = {
+                ...last,
+                id: raw.id || last.id,
+                text,
+                thought_process: raw.thought_process || (last as any).thought_process,
+              };
+              return updated;
+            }
             return [
               ...prev,
               {
                 id: raw.id || `u-${Date.now()}`,
                 speaker,
                 text,
+                thought_process: raw.thought_process,
                 isFinal: true,
                 latencyMs: raw.latencyMs,
                 sequence: Date.now(),
@@ -296,6 +407,29 @@ export default function SwitchboardPage() {
               try {
                 const utter = new SpeechSynthesisUtterance(text);
                 utter.rate = 1.05;
+                utter.onstart = () => {
+                  setIsAdvocateSpeaking(true);
+                  if (recognitionRef.current) {
+                    try {
+                      recognitionRef.current.onresult = null;
+                      recognitionRef.current.onerror = null;
+                      recognitionRef.current.onend = null;
+                      recognitionRef.current.stop();
+                    } catch (_) {}
+                    recognitionRef.current = null;
+                  }
+                  setIsSpeaking(false);
+                  accumulatedTurnTextRef.current = "";
+                };
+                utter.onend = () => {
+                  setIsAdvocateSpeaking(false);
+                  setTimeout(() => {
+                    if (isListeningRef.current && !switchboardAudioQueue.isPlaying) {
+                      accumulatedTurnTextRef.current = "";
+                      startRecognition();
+                    }
+                  }, 500);
+                };
                 window.speechSynthesis.speak(utter);
               } catch {}
             }
@@ -353,19 +487,34 @@ export default function SwitchboardPage() {
   };
 
   const handleSendMessage = async (customText?: string) => {
-    const textToSend = (customText || messageInput).trim();
-    if (!textToSend || !activeCallItem) return;
+    const raw = (customText || messageInput).trim();
+    if (!raw || !activeCallItem) return;
 
-    // Production-level deduplication: prevent identical submissions within 2.5 seconds
+    const textToSend = deduplicateConsecutivePhrases(raw);
+    if (!textToSend) return;
+
+    // Production-level deduplication: prevent identical submissions within 1.5 seconds
     const now = Date.now();
     if (
       textToSend.toLowerCase() === lastSentTextRef.current.toLowerCase() &&
-      now - lastSentTimeRef.current < 2500
+      now - lastSentTimeRef.current < 1500
     ) {
       return;
     }
     lastSentTextRef.current = textToSend;
     lastSentTimeRef.current = now;
+
+    // Reset input state and accumulated buffers IMMEDIATELY to prevent repetition
+    setMessageInput("");
+    accumulatedTurnTextRef.current = "";
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+
+    // Stop current recognition cleanly so Chrome resets its internal buffer for next turn
+    if (recognitionRef.current && isListeningRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (_) {}
+    }
 
     setSending(true);
     try {
@@ -374,12 +523,12 @@ export default function SwitchboardPage() {
         text: textToSend,
         auto_advocate_reply: true,
       });
-      if (!customText) setMessageInput("");
       if (res.promise_detected) {
         // Will also be received over WS
       }
     } catch (err) {
       console.error("Failed to send message over call:", err);
+      alert("Failed to deliver message over call. Please retry.");
     } finally {
       setSending(false);
     }
@@ -792,24 +941,36 @@ export default function SwitchboardPage() {
 
                 {/* Live Mic Listening Visual Wave Bar */}
                 {isListening && (
-                  <div className="flex items-center justify-between px-3.5 py-2 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 animate-fade-in text-[11px]">
+                  <div className={`flex items-center justify-between px-3.5 py-2 rounded-2xl border text-[11px] animate-fade-in transition-all ${
+                    isAdvocateSpeaking
+                      ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-300"
+                      : isSpeaking
+                      ? "bg-rose-500/15 border-rose-500/40 text-rose-200 ring-2 ring-rose-500/20"
+                      : "bg-rose-500/10 border-rose-500/30 text-rose-300"
+                  }`}>
                     <div className="flex items-center gap-2.5">
                       <span className="relative flex h-2.5 w-2.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                        <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isAdvocateSpeaking ? "bg-indigo-400" : "bg-rose-400"}`}></span>
+                        <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isAdvocateSpeaking ? "bg-indigo-500" : "bg-rose-500"}`}></span>
                       </span>
                       <span className="font-semibold">
-                        {isSpeaking ? "Voice detected — capturing speech..." : "Continuous Mic Active — Speak into your microphone"}
+                        {isAdvocateSpeaking
+                          ? "AI Advocate is speaking... (Mic paused to prevent echo)"
+                          : isSpeaking
+                          ? "Voice detected — capturing speech cleanly..."
+                          : "Continuous Mic Active — Speak naturally as operator"}
                       </span>
-                      <div className="flex items-end gap-0.5 h-3.5 ml-1">
-                        <span className={`w-0.5 bg-rose-400 rounded-full transition-all duration-150 ${isSpeaking ? "h-3 animate-pulse" : "h-1"}`} />
-                        <span className={`w-0.5 bg-rose-400 rounded-full transition-all duration-150 ${isSpeaking ? "h-3.5 animate-bounce" : "h-1.5"}`} />
-                        <span className={`w-0.5 bg-rose-400 rounded-full transition-all duration-150 ${isSpeaking ? "h-2 animate-pulse" : "h-1"}`} />
-                        <span className={`w-0.5 bg-rose-400 rounded-full transition-all duration-150 ${isSpeaking ? "h-3.5 animate-bounce" : "h-1.5"}`} />
-                      </div>
+                      {!isAdvocateSpeaking && (
+                        <div className="flex items-end gap-0.5 h-3.5 ml-1">
+                          <span className={`w-0.5 bg-rose-400 rounded-full transition-all duration-150 ${isSpeaking ? "h-3 animate-pulse" : "h-1"}`} />
+                          <span className={`w-0.5 bg-rose-400 rounded-full transition-all duration-150 ${isSpeaking ? "h-3.5 animate-bounce" : "h-1.5"}`} />
+                          <span className={`w-0.5 bg-rose-400 rounded-full transition-all duration-150 ${isSpeaking ? "h-2 animate-pulse" : "h-1"}`} />
+                          <span className={`w-0.5 bg-rose-400 rounded-full transition-all duration-150 ${isSpeaking ? "h-3.5 animate-bounce" : "h-1.5"}`} />
+                        </div>
+                      )}
                     </div>
                     <span className="text-[10px] text-white/50 hidden sm:inline">
-                      {autoSendVoice ? "Auto-dispatches after natural pause (1.1s)" : "Click Send when finished"}
+                      {autoSendVoice ? "Auto-dispatches on 1.2s pause · Or press Enter" : "Press Enter or Send when finished"}
                     </span>
                   </div>
                 )}

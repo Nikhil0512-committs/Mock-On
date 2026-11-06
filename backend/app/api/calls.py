@@ -8,7 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db, AsyncSessionLocal
@@ -258,13 +258,14 @@ async def send_call_message(
     prev_utt_res = await db.execute(
         select(Utterance)
         .where(Utterance.call_id == call_id)
-        .order_by(Utterance.sequence_num.desc())
+        .order_by(Utterance.created_at.desc(), Utterance.sequence_num.desc())
         .limit(1)
     )
     prev_utt = prev_utt_res.scalar_one_or_none()
     if prev_utt and prev_utt.speaker_role == payload.speaker and prev_utt.raw_text.strip().lower() == text.lower():
-        now_ts = datetime.now().timestamp()
-        if abs(now_ts - (prev_utt.sequence_num or 0)) < 2.0:
+        now_dt = datetime.now(timezone.utc)
+        prev_dt = prev_utt.created_at
+        if prev_dt and (now_dt - prev_dt).total_seconds() < 2.5:
             logger.info(f"Deduplicated rapid duplicate utterance on call {call_id}: '{text}'")
             return {
                 "ok": True,
@@ -274,13 +275,19 @@ async def send_call_message(
                 "deduplicated": True,
             }
 
+    # Monotonic sequence numbering
+    seq_res = await db.execute(
+        select(func.coalesce(func.max(Utterance.sequence_num), 0)).where(Utterance.call_id == call_id)
+    )
+    next_seq = int(seq_res.scalar() or 0) + 1
+
     utt_id = str(uuid.uuid4())
     utt = Utterance(
         id=utt_id,
         call_id=call_id,
         case_id=call.case_id,
         speaker_role=payload.speaker,
-        sequence_num=int(datetime.now().timestamp()),
+        sequence_num=next_seq,
         raw_text=text,
         normalised_text=text,
     )
@@ -386,7 +393,7 @@ async def send_call_message(
                         t_res = await async_db.execute(
                             select(Utterance)
                             .where(Utterance.call_id == call_id)
-                            .order_by(Utterance.sequence_num)
+                            .order_by(Utterance.sequence_num.asc(), Utterance.created_at.asc())
                         )
                         all_turns = t_res.scalars().all()
                         for u in all_turns:
@@ -396,13 +403,11 @@ async def send_call_message(
                                 "normalised_text": u.normalised_text,
                             })
 
-                    # If the latest turn in DB is ALREADY an advocate reply that occurred very recently (< 1.8s),
-                    # avoid firing another duplicate advocate turn
+                    # Strict conversational guard: If the latest turn in DB is ALREADY an advocate reply ('user'),
+                    # the representative has not spoken since. Never produce duplicate stacked advocate turns!
                     if all_turns and all_turns[-1].speaker_role == "user":
-                        now_ts = datetime.now().timestamp()
-                        if abs(now_ts - (all_turns[-1].sequence_num or 0)) < 1.8:
-                            logger.info(f"Advocate already replied recently for call {call_id}; skipping duplicate.")
-                            return
+                        logger.info(f"Advocate was already the last speaker on call {call_id}; skipping duplicate advocate reply.")
+                        return
 
                     # Generate intelligent context-aware reply using Sarvam LLM + Intake docket
                     adv_result = await sarvam_extractor.generate_advocate_response(
@@ -439,12 +444,17 @@ async def send_call_message(
 
                     adv_id = str(uuid.uuid4())
                     async with AsyncSessionLocal() as async_db:
+                        adv_seq_res = await async_db.execute(
+                            select(func.coalesce(func.max(Utterance.sequence_num), 0)).where(Utterance.call_id == call_id)
+                        )
+                        adv_next_seq = int(adv_seq_res.scalar() or 0) + 1
+
                         adv_utt = Utterance(
                             id=adv_id,
                             call_id=call_id,
                             case_id=call.case_id,
                             speaker_role="user",
-                            sequence_num=int(datetime.now().timestamp()),
+                            sequence_num=adv_next_seq,
                             raw_text=advocate_text,
                             normalised_text=advocate_text,
                         )

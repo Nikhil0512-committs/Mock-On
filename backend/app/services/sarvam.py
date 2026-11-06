@@ -805,14 +805,17 @@ class SarvamExtractor:
                 spoken = f"The disputed amount is Rs {amt}."
             return spoken, thought
 
-        # 8. Operator Acknowledging or Reviewing Docket ("I can see the dispute", "checking", "looking into")
-        is_ack = bool(re.search(r"\b(see\s+the\s+dispute|can\s+see|looking\s+into|checking|one\s+moment|give\s+me\s+a\s+moment|hold\s+on|let\s+me\s+check|details)\b", lower_rep))
+        # 8. Operator Asking to Hold / Reviewing Docket ("hold per rakhen", "checking", "one moment", "line par rahein")
+        is_ack = bool(re.search(
+            r"\b(see\s+the\s+dispute|can\s+see|looking\s+into|checking|one\s+moment|give\s+me\s+a\s+moment|hold\s*(?:on|pe|par|per|karein|kijiye|rakhen|rakhein)?|line\s*(?:par|pe)\s*(?:rahein|bani)|2\s*min(?:ut)?|do\s*minute|ek\s*min(?:ut)?|wait\s*karein|rukhiye|let\s*me\s*check|check\s*kar\s*(?:raha|rahi|lete|rahe)|dekh\s*(?:raha|rahi|lete|rahe)|details)\b",
+            lower_rep
+        ))
         if is_ack:
-            thought = f"Statutory Strategy: Representative reviewing files. Acknowledging and requesting reversal confirmation."
+            thought = f"Statutory Strategy: Operator requested brief hold or reviewing account details. Politely confirming holding on the line for account '{id_val}'."
             if is_hindi:
-                spoken = f"Ji representative ji, kripya details verify karein aur Rs {amt} ka reversal confirm karein."
+                spoken = f"Theek hai representative ji, main line par hold kar raha hoon. Kripya account {id_val} check karke batayein."
             else:
-                spoken = f"Thank you representative. Please verify the details and confirm the reversal of Rs {amt}."
+                spoken = f"Sure representative, I am holding on the line. Please review account {id_val} and update us."
             return spoken, thought
 
         # 9. Problem / Issue explanation
@@ -842,11 +845,15 @@ class SarvamExtractor:
                 clean_content = content.replace('"', '').replace('*', '').strip()
                 if clean_content and len(clean_content) > 10:
                     # Guard: If LLM re-introduced itself despite prior intro, replace with factual pivot
-                    if has_introduced and any(p in clean_content.lower() for p in ["personal assistant", "ai personal assistant", "hum hindi ya english", "speak in english"]):
+                    if has_introduced and any(p in clean_content.lower() for p in [
+                        "personal assistant", "ai personal assistant", "hum hindi ya english",
+                        "speak in english", "calling regarding help", "dispute ke regarding",
+                        "calling regarding nikhil", "main nikhil sharma ka"
+                    ]):
                         if is_hindi:
-                            clean_content = f"Main {consumer_name} ke Rs {amt} dispute ke regarding call kar raha hoon. Kripya account {id_val} check karein."
+                            clean_content = f"Ji representative ji, main {consumer_name} ke Rs {amt} dispute ke regarding baat kar raha hoon. Kripya account {id_val} check karein."
                         else:
-                            clean_content = f"I am calling regarding {consumer_name}'s dispute for Rs {amt}. Could you please check account {id_val}?"
+                            clean_content = f"Thank you. I am calling regarding {consumer_name}'s dispute for Rs {amt}. Could you please check account {id_val}?"
                     # Anti-verbatim repetition guard
                     if last_advocate_text and clean_content.strip().lower() == last_advocate_text.strip().lower():
                         if is_hindi:

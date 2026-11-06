@@ -118,7 +118,6 @@ class PrismaSTTAdapter:
         import httpx
         headers = {
             "x-api-key-id": self.api_key,
-            "x-apikey-id": self.api_key,
             "language_code": self.language,
             "model": self.model,
             "x-sample-rate": str(self.sample_rate),

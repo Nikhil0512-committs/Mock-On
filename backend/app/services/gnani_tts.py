@@ -80,6 +80,7 @@ class TimbreTTSAdapter:
             logger.debug(f"TTS cache hit for: {clean_text[:40]}")
             return _AUDIO_CACHE[cache_key]
 
+        sample_rate = getattr(settings, "gnani_tts_sample_rate", 24000)
         payload = {
             "text": clean_text,
             "voice": self.voice,
@@ -87,7 +88,7 @@ class TimbreTTSAdapter:
             "language": self.language,
             "speed": self.speed,
             "audio_config": {
-                "sample_rate_hertz": settings.audio_sample_rate,
+                "sample_rate_hertz": sample_rate,
                 "container": "wav",
             },
         }

@@ -34,6 +34,7 @@ import {
 import { useStore } from "../store";
 import { useCallWebSocket } from "../hooks/useCallWebSocket";
 import { callsApi, casesApi, promisesApi } from "../lib/api";
+import { deduplicateConsecutivePhrases } from "./SwitchboardPage";
 import ShareFamilyModal from "../components/ShareFamilyModal";
 import CallSummaryModal from "../components/CallSummaryModal";
 import AudioWaveformVisualizer from "../components/AudioWaveformVisualizer";
@@ -81,17 +82,26 @@ export default function CallPage() {
   const [userMessageInput, setUserMessageInput] = useState("");
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
-
+  const accumulatedTextRef = useRef<string>("");
   const silenceTimerRef = useRef<any>(null);
 
   const toggleMic = () => {
     if (isListening) {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      recognitionRef.current?.stop();
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.onresult = null;
+          recognitionRef.current.onerror = null;
+          recognitionRef.current.onend = null;
+          recognitionRef.current.stop();
+        } catch (_) {}
+        recognitionRef.current = null;
+      }
       setIsListening(false);
-      if (userMessageInput.trim() && activeCall) {
-        const text = userMessageInput.trim();
+      const text = deduplicateConsecutivePhrases((userMessageInput || accumulatedTextRef.current).trim());
+      if (text && activeCall) {
         setUserMessageInput("");
+        accumulatedTextRef.current = "";
         callsApi.sendCallMessage(activeCall.id, {
           speaker: "user",
           text,
@@ -115,28 +125,35 @@ export default function CallPage() {
       recognition.lang = "en-IN";
 
       recognition.onresult = (event: any) => {
-        let text = "";
-        let isFinal = false;
-        for (let i = 0; i < event.results.length; ++i) {
-          text += event.results[i][0].transcript;
-          if (event.results[i].isFinal) isFinal = true;
+        let interim = "";
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const res = event.results[i];
+          if (res.isFinal) {
+            accumulatedTextRef.current += (accumulatedTextRef.current ? " " : "") + res[0].transcript.trim();
+          } else {
+            interim += res[0].transcript;
+          }
         }
-        setUserMessageInput(text);
+        const combined = (accumulatedTextRef.current + " " + interim).trim();
+        const clean = deduplicateConsecutivePhrases(combined);
+        if (clean) {
+          setUserMessageInput(clean);
+        }
 
-        if (text.trim() && activeCall) {
+        if (clean.length >= 2 && activeCall) {
           if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-          const delay = isFinal ? 400 : 1400;
           silenceTimerRef.current = setTimeout(() => {
-            const candidate = text.trim();
+            const candidate = clean.trim();
             if (candidate && activeCall) {
               setUserMessageInput("");
+              accumulatedTextRef.current = "";
               callsApi.sendCallMessage(activeCall.id, {
                 speaker: "user",
                 text: candidate,
                 auto_advocate_reply: false,
               }).catch(() => {});
             }
-          }, delay);
+          }, 1200);
         }
       };
 
@@ -148,6 +165,7 @@ export default function CallPage() {
         setIsListening(false);
       };
 
+      accumulatedTextRef.current = "";
       recognition.start();
       recognitionRef.current = recognition;
       setIsListening(true);

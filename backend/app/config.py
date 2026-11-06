@@ -9,7 +9,7 @@ from pydantic import Field
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "backend/.env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     gnani_tts_voice: str = "Shivani"
     gnani_tts_language: str = "hi-en"
     gnani_tts_speed: float = 1.0
+    gnani_tts_sample_rate: int = 24000
 
     # Sarvam AI
     sarvam_base_url: str = "https://api.sarvam.ai/v1"
