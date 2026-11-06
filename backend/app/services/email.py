@@ -54,23 +54,21 @@ class EmailService:
         else:
             msg.set_content(html_body, subtype="html")
 
-        # Always try Port 465 (Direct SSL) first for sub-second delivery, fallback to 587
-        ports = [465, 587] if self.port == 465 else [self.port, 465, 587]
-        # Deduplicate while preserving order
-        ports = list(dict.fromkeys(ports))
+        # Direct SSL on Port 465 connects in <1s with full TLS encryption
+        ports = [465, 587]
 
         last_exc = None
         for current_port in ports:
             try:
                 ctx = ssl.create_default_context()
                 if current_port == 465:
-                    with smtplib.SMTP_SSL(self.host, 465, context=ctx, timeout=15) as server:
+                    with smtplib.SMTP_SSL(self.host, 465, context=ctx, timeout=7) as server:
                         if self.user and self.password:
                             server.login(self.user, self.password)
                         server.send_message(msg)
                     return True
                 else:
-                    with smtplib.SMTP(self.host, 587, timeout=15) as server:
+                    with smtplib.SMTP(self.host, 587, timeout=7) as server:
                         server.starttls(context=ctx)
                         if self.user and self.password:
                             server.login(self.user, self.password)
