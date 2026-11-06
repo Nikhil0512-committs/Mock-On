@@ -25,6 +25,38 @@ router = APIRouter(prefix="/calls", tags=["calls"])
 logger = logging.getLogger(__name__)
 
 
+def deduplicate_phrase_repetitions(text: str) -> str:
+    """Strip runaway phrase loops caused by browser speech recognition or mic echo."""
+    if not text:
+        return ""
+    import re
+    # Strip identical repeated chunks of length 8 to 250 characters
+    cleaned = re.sub(r'(.{8,250}?)\s+(?:\1\s*)+', r'\1 ', text, flags=re.IGNORECASE)
+    words = cleaned.strip().split()
+    if len(words) < 2:
+        return cleaned.strip()
+
+    max_w = min(len(words) // 2, 60)
+    for _ in range(2):
+        for window in range(max_w, 0, -1):
+            out = []
+            i = 0
+            while i < len(words):
+                if i + window * 2 <= len(words):
+                    p1 = " ".join(words[i : i + window]).lower()
+                    p2 = " ".join(words[i + window : i + window * 2]).lower()
+                    if p1 == p2:
+                        out.extend(words[i : i + window])
+                        i += window * 2
+                        while i + window <= len(words) and " ".join(words[i : i + window]).lower() == p1:
+                            i += window
+                        continue
+                out.append(words[i])
+                i += 1
+            words = out
+    return " ".join(words).strip()
+
+
 class AcceptCallPayload(BaseModel):
     operator_name: Optional[str] = "Tata / Airtel Support Specialist"
 
@@ -250,7 +282,7 @@ async def send_call_message(
     c_res = await db.execute(select(Case).where(Case.id == call.case_id))
     case = c_res.scalar_one_or_none()
 
-    text = payload.text.strip()
+    text = deduplicate_phrase_repetitions(payload.text.strip())
     if not text:
         raise HTTPException(400, "Text cannot be empty")
 
@@ -295,15 +327,17 @@ async def send_call_message(
     db.add(utt)
     await db.commit()
 
-    # Attempt TTS synthesis for authentic voice call experience
+    # Attempt TTS synthesis ONLY for consumer/advocate speech (payload.speaker == "user").
+    # Company representative speech ('agent') is human/switchboard voice and must NEVER be voice-read by our AI!
     audio_b64 = None
-    try:
-        from app.services.gnani_tts import tts_adapter
-        import base64
-        audio_bytes = await tts_adapter.synthesise(text)
-        audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
-    except Exception as e:
-        logger.debug(f"Audio synthesis skipped: {e}")
+    if payload.speaker == "user":
+        try:
+            from app.services.gnani_tts import tts_adapter
+            import base64
+            audio_bytes = await tts_adapter.synthesise(text)
+            audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+        except Exception as e:
+            logger.debug(f"Audio synthesis skipped: {e}")
 
     # 1. Broadcast utterance with audio to both sides
     await manager.broadcast(call_id, {
@@ -381,125 +415,127 @@ async def send_call_message(
         # Intelligent Dynamic Advocate AI reply based on provided intake info
         if payload.auto_advocate_reply:
             async def advocate_reply():
-                async with _call_advocate_locks[call_id]:
-                    # Natural 120ms conversational turn pause (ultra-low latency)
-                    await asyncio.sleep(0.12)
-                    info = case.approved_info if case else {}
-                    amt = info.get("disputed_amount") or "8,500"
-                    goal_text = case.goal if case else "Dispute provisional meter billing excess"
+                try:
+                    async with _call_advocate_locks[call_id]:
+                        # Natural 120ms conversational turn pause (ultra-low latency)
+                        await asyncio.sleep(0.12)
+                        info = (case.approved_info or {}) if case else {}
+                        amt = info.get("disputed_amount") or "8,500"
+                        goal_text = case.goal if case else "Dispute provisional meter billing excess"
 
-                    # Pull previous turns from database for conversational context under lock
-                    recent_db_turns = []
-                    async with AsyncSessionLocal() as async_db:
-                        t_res = await async_db.execute(
-                            select(Utterance)
-                            .where(Utterance.call_id == call_id)
-                            .order_by(Utterance.sequence_num.asc(), Utterance.created_at.asc())
+                        # Pull previous turns from database for conversational context under lock
+                        recent_db_turns = []
+                        async with AsyncSessionLocal() as async_db:
+                            t_res = await async_db.execute(
+                                select(Utterance)
+                                .where(Utterance.call_id == call_id)
+                                .order_by(Utterance.sequence_num.asc(), Utterance.created_at.asc())
+                            )
+                            all_turns = t_res.scalars().all()
+                            for u in all_turns:
+                                recent_db_turns.append({
+                                    "speaker_role": u.speaker_role,
+                                    "raw_text": u.raw_text,
+                                    "normalised_text": u.normalised_text,
+                                })
+
+                        # Freeze guard: skip ONLY if the advocate replied within the last 2 seconds.
+                        if all_turns and all_turns[-1].speaker_role == "user":
+                            last_adv_time = all_turns[-1].created_at
+                            if last_adv_time:
+                                adv_age_s = (datetime.now(timezone.utc) - last_adv_time).total_seconds()
+                                if adv_age_s < 2.0:
+                                    logger.info(
+                                        f"Advocate replied {adv_age_s:.1f}s ago on call {call_id}; "
+                                        "skipping rapid-duplicate advocate reply."
+                                    )
+                                    return
+
+                        # Generate intelligent context-aware reply using Sarvam LLM + Intake docket
+                        adv_result = await sarvam_extractor.generate_advocate_response(
+                            case_info=info,
+                            goal=goal_text,
+                            recent_turns=recent_db_turns,
+                            rep_latest_text=text,
+                            is_refusal=is_refusal,
+                            promise_detected=promise_detected,
                         )
-                        all_turns = t_res.scalars().all()
-                        for u in all_turns:
-                            recent_db_turns.append({
-                                "speaker_role": u.speaker_role,
-                                "raw_text": u.raw_text,
-                                "normalised_text": u.normalised_text,
-                            })
+                        if isinstance(adv_result, tuple):
+                            advocate_text, thought_process = adv_result
+                        else:
+                            advocate_text, thought_process = adv_result, "Autonomous Strategy: Applying domain regulations."
 
-                    # Freeze guard: skip ONLY if the advocate replied within the last 3 seconds.
-                    # A wider window would block legitimate new operator turns after Shivani responds.
-                    if all_turns and all_turns[-1].speaker_role == "user":
-                        last_adv_time = all_turns[-1].created_at
-                        if last_adv_time:
-                            adv_age_s = (datetime.now(timezone.utc) - last_adv_time).total_seconds()
-                            if adv_age_s < 3.0:
-                                logger.info(
-                                    f"Advocate replied {adv_age_s:.1f}s ago on call {call_id}; "
-                                    "skipping rapid-duplicate advocate reply."
-                                )
-                                return
+                        # If representative refused, dispatch an immediate statutory notice email to consumer
+                        if is_refusal and case:
+                            user_email = (
+                                case.user_email
+                                or (case.owner_id if "@" in (case.owner_id or "") else None)
+                                or (case.approved_info or {}).get("contact_email")
+                                or (case.approved_info or {}).get("email")
+                            )
+                            if user_email and "@" in user_email and not any(d in user_email.lower() for d in ["@mockon.ai", "@example.com", "@test.com"]):
+                                asyncio.create_task(email_service.send_refusal_notice(
+                                    to_email=user_email,
+                                    case_id=case.id,
+                                    provider=info.get("service_provider") or "Customer Care",
+                                    identifier_val=info.get("identifier_value") or "CA-1029481029",
+                                    amount_str=f"₹{amt}",
+                                    ticket_number=info.get("ticket_number") or "TKT-2026-78432",
+                                    rep_statement=text,
+                                ))
 
-                    # Generate intelligent context-aware reply using Sarvam LLM + Intake docket
-                    adv_result = await sarvam_extractor.generate_advocate_response(
-                        case_info=info,
-                        goal=goal_text,
-                        recent_turns=recent_db_turns,
-                        rep_latest_text=text,
-                        is_refusal=is_refusal,
-                        promise_detected=promise_detected,
-                    )
-                    if isinstance(adv_result, tuple):
-                        advocate_text, thought_process = adv_result
-                    else:
-                        advocate_text, thought_process = adv_result, "Autonomous Strategy: Applying domain regulations."
+                        adv_id = str(uuid.uuid4())
+                        async with AsyncSessionLocal() as async_db:
+                            adv_seq_res = await async_db.execute(
+                                select(func.coalesce(func.max(Utterance.sequence_num), 0)).where(Utterance.call_id == call_id)
+                            )
+                            adv_next_seq = int(adv_seq_res.scalar() or 0) + 1
 
-                    # If representative refused, dispatch an immediate statutory notice email to consumer
-                    if is_refusal and case:
-                        user_email = (
-                            case.user_email
-                            or (case.owner_id if "@" in (case.owner_id or "") else None)
-                            or (case.approved_info or {}).get("contact_email")
-                            or (case.approved_info or {}).get("email")
-                        )
-                        if user_email:
-                            asyncio.create_task(email_service.send_refusal_notice(
-                                to_email=user_email,
-                                case_id=case.id,
-                                provider=info.get("service_provider") or "Customer Care",
-                                identifier_val=info.get("identifier_value") or "CA-1029481029",
-                                amount_str=f"₹{amt}",
-                                ticket_number=info.get("ticket_number") or "TKT-2026-78432",
-                                rep_statement=text,
-                            ))
+                            adv_utt = Utterance(
+                                id=adv_id,
+                                call_id=call_id,
+                                case_id=call.case_id,
+                                speaker_role="user",
+                                sequence_num=adv_next_seq,
+                                raw_text=advocate_text,
+                                normalised_text=advocate_text,
+                            )
+                            async_db.add(adv_utt)
+                            await async_db.commit()
 
-                    adv_id = str(uuid.uuid4())
-                    async with AsyncSessionLocal() as async_db:
-                        adv_seq_res = await async_db.execute(
-                            select(func.coalesce(func.max(Utterance.sequence_num), 0)).where(Utterance.call_id == call_id)
-                        )
-                        adv_next_seq = int(adv_seq_res.scalar() or 0) + 1
-
-                        adv_utt = Utterance(
-                            id=adv_id,
-                            call_id=call_id,
-                            case_id=call.case_id,
-                            speaker_role="user",
-                            sequence_num=adv_next_seq,
-                            raw_text=advocate_text,
-                            normalised_text=advocate_text,
-                        )
-                        async_db.add(adv_utt)
-                        await async_db.commit()
-
-                    # ── TEXT-FIRST FAST PATH ──────────────────────────────────────────
-                    # Broadcast the text reply immediately (< 200ms) so the UI shows
-                    # Shivani's response without waiting for TTS synthesis.
-                    await manager.broadcast(call_id, {
-                        "type": "utterance",
-                        "data": {
-                            "id": adv_id,
-                            "speaker": "user",
-                            "text": advocate_text,
-                            "thought_process": thought_process,
-                            "is_final": True,
-                            "latencyMs": 110,
-                            "audio_b64": None,  # Audio follows via audio_patch
-                        },
-                    })
-
-                    # ── BACKGROUND TTS ────────────────────────────────────────────────
-                    # Synthesize audio and send as a secondary audio_patch event.
-                    # The UI plays it via the SequentialAudioQueue when it arrives.
-                    try:
-                        from app.services.gnani_tts import tts_adapter
-                        import base64
-                        adv_bytes = await tts_adapter.synthesise(advocate_text)
-                        adv_audio = base64.b64encode(adv_bytes).decode("utf-8")
+                        # ── TEXT-FIRST FAST PATH ──────────────────────────────────────────
+                        # Broadcast the text reply immediately (< 200ms) so the UI shows
+                        # Shivani's response without waiting for TTS synthesis.
                         await manager.broadcast(call_id, {
-                            "type": "audio_patch",
-                            "utterance_id": adv_id,
-                            "audio_b64": adv_audio,
+                            "type": "utterance",
+                            "data": {
+                                "id": adv_id,
+                                "speaker": "user",
+                                "text": advocate_text,
+                                "thought_process": thought_process,
+                                "is_final": True,
+                                "latencyMs": 110,
+                                "audio_b64": None,  # Audio follows via audio_patch
+                            },
                         })
-                    except Exception as e:
-                        logger.debug(f"Advocate TTS synthesis failed (text already delivered): {e}")
+
+                        # ── BACKGROUND TTS ────────────────────────────────────────────────
+                        # Synthesize audio and send as a secondary audio_patch event.
+                        # The UI plays it via the SequentialAudioQueue when it arrives.
+                        try:
+                            from app.services.gnani_tts import tts_adapter
+                            import base64
+                            adv_bytes = await tts_adapter.synthesise(advocate_text)
+                            adv_audio = base64.b64encode(adv_bytes).decode("utf-8")
+                            await manager.broadcast(call_id, {
+                                "type": "audio_patch",
+                                "utterance_id": adv_id,
+                                "audio_b64": adv_audio,
+                            })
+                        except Exception as e:
+                            logger.debug(f"Advocate TTS synthesis failed (text already delivered): {e}")
+                except Exception as adv_err:
+                    logger.error(f"Error generating advocate reply on call {call_id}: {adv_err}", exc_info=True)
 
             asyncio.create_task(advocate_reply())
 
@@ -604,32 +640,36 @@ async def end_call(
 
     # Always dispatch post-call summary email with the AI Agent's autonomous determination
     if case:
+        target_emails = []
         user_email = (
             case.user_email
             or (case.owner_id if "@" in (case.owner_id or "") else None)
             or (case.approved_info or {}).get("contact_email")
             or (case.approved_info or {}).get("email")
         )
-        if not user_email or "@" not in user_email:
-            user_email = settings.smtp_user
+        if user_email and "@" in user_email and not any(d in user_email.lower() for d in ["@mockon.ai", "@example.com", "@test.com", "@mock.com"]):
+            target_emails.append(user_email)
 
-        if user_email:
-            ticket_number = info.get("ticket_number") or "TKT-2026-78432"
-            amt_str = f"₹{info.get('disputed_amount', '8,500')}"
-            id_type = info.get("identifier_type") or "Reference"
-            id_val = info.get("identifier_value") or info.get("phone_number") or "CA-1029481029"
+        if settings.smtp_user and settings.smtp_user not in target_emails:
+            target_emails.append(settings.smtp_user)
 
-            p_list = [
-                {
-                    "type": getattr(p, "commitment_type", "refund"),
-                    "amount": getattr(p, "amount", amt_str),
-                    "deadline_phrase": getattr(p, "raw_date_phrase", "in 3 days") or "in 3 days",
-                }
-                for p in confirmed_promises
-            ]
+        ticket_number = info.get("ticket_number") or "TKT-2026-78432"
+        amt_str = f"₹{info.get('disputed_amount', '8,500')}"
+        id_type = info.get("identifier_type") or "Reference"
+        id_val = info.get("identifier_value") or info.get("phone_number") or "CA-1029481029"
 
+        p_list = [
+            {
+                "type": getattr(p, "commitment_type", "refund"),
+                "amount": getattr(p, "amount", amt_str),
+                "deadline_phrase": getattr(p, "raw_date_phrase", "in 3 days") or "in 3 days",
+            }
+            for p in confirmed_promises
+        ]
+
+        for recipient in target_emails:
             asyncio.create_task(email_service.send_call_summary(
-                to_email=user_email,
+                to_email=recipient,
                 case_id=case.id,
                 call_id=call.id,
                 provider=provider,

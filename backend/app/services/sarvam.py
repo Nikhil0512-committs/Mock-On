@@ -418,6 +418,8 @@ class SarvamExtractor:
         to the company representative's statements or questions during the live switchboard call,
         utilizing the full intake briefing, docket numbers, and context.
         """
+        if not case_info:
+            case_info = {}
         provider = case_info.get("service_provider") or "Customer Care"
         id_type = case_info.get("identifier_type") or "Consumer Account No (CA)"
         id_val = case_info.get("identifier_value") or case_info.get("phone_number") or "CA-1029481029"
@@ -425,7 +427,7 @@ class SarvamExtractor:
         ticket = case_info.get("ticket_number") or "TKT-2026-78432"
         consumer_name = case_info.get("consumer_name") or case_info.get("full_name") or "Nikhil Sharma"
         phone = case_info.get("phone_number") or case_info.get("registered_mobile") or "+91 91030 31412"
-        email = case_info.get("contact_email") or case_info.get("user_email") or "nikhil@mockon.ai"
+        email = case_info.get("contact_email") or case_info.get("user_email") or "nikhilsharma5122006@gmail.com"
         is_follow_up = bool(
             case_info.get("is_follow_up")
             or "OVERDUE" in (goal or "").upper()
@@ -464,27 +466,13 @@ class SarvamExtractor:
         is_hindi = any(w in lower_rep for w in [
             "namaste", "swagat", "sahayata", "bhasha", "madad", "kaise", "boliye",
             "aapka", "karein", "hindi", "theek", "batayein", "kripya", "dhanyawad",
-            "dikkat", "pareshani", "kya", "shubh"
+            "dikkat", "pareshani", "kya", "shubh", "shukriya", "dabaen", "dabayein",
+            "ek", "do", "naam", "bataye", "rukiye", "kahiye", "sun", "sunie"
         ])
-
-        if has_introduced:
-            turn_instruction = (
-                f"1. SUBSEQUENT TURNS (DO NOT INTRODUCE YOURSELF AGAIN):\n"
-                f"   - You have ALREADY introduced yourself earlier in the call. NEVER re-introduce yourself or say 'Hello, I am ... personal assistant' again!\n"
-                f"   - If the representative greets you or asks how to help, directly state: 'Thank you. I am calling regarding {consumer_name}'s {provider} dispute for Rs {amt}. Could you please check account {id_val}?'\n"
-                f"   - Answer ONLY the specific question asked by the representative. Keep replies to 1 or 2 spoken sentences maximum.\n"
-            )
-        else:
-            turn_instruction = (
-                f"1. OPENING TURN (INTRODUCE YOURSELF & STATE REASON FOR CALL):\n"
-                f"   - When the representative welcomes or greets you, introduce yourself naturally: 'Hello, I am {consumer_name}'s personal assistant. I am calling regarding {consumer_name}'s {provider} bill dispute.'\n"
-                f"   - If they speak in Hindi or ask for language preference, respond in natural feminine Hindi: 'Namaste, main {consumer_name} ki personal assistant bol rahi hoon. Yeh call unke {provider} bill dispute ke regarding hai. Hum Hindi ya English kisi mein bhi baat kar sakte hain.'\n"
-                f"   - CRITICAL: In this opening turn, DO NOT blabber account numbers, meter numbers, or specific numbers unless they specifically asked for them!\n"
-            )
 
         system_instruction = (
             f"You are Shivani, consumer {consumer_name}'s female AI Personal Assistant representing {consumer_name} on a live 2-way phone call with {provider} customer support.\n"
-            f"Your voice is female. When speaking in Hindi or Hinglish, always use grammatically feminine first-person verb forms: say 'main {consumer_name} ki personal assistant bol rahi hoon', 'main hold kar rahi hoon', 'baat kar rahi hoon'. NEVER use masculine forms like 'bol raha hoon' or 'kar raha hoon'.\n\n"
+            f"Your voice is female. When speaking in Hindi or Hinglish, always use grammatically feminine first-person verb forms: say 'main {consumer_name} ki personal assistant bol rahi hoon', 'main hold kar rahi hoon', 'baat kar rahi hoon', 'bata rahi hoon'. NEVER use masculine forms like 'bol raha hoon' or 'kar raha hoon'.\n\n"
             f"CONSUMER DOCKET & GRIEVANCE BRIEFING:\n"
             f"- Consumer Full Name: {consumer_name}\n"
             f"- Service Provider: {provider}\n"
@@ -493,30 +481,23 @@ class SarvamExtractor:
             f"- Ticket / Reference: {ticket}\n"
             f"- Registered Phone: {phone}\n"
             f"- Grievance Briefing from Consumer: {goal}\n\n"
-            f"STRICT CONVERSATIONAL INSTRUCTIONS (NATURAL 2-WAY PHONE CALL):\n"
-            f"{turn_instruction}\n"
-            f"2. SUBSEQUENT TURNS (ANSWER SPECIFIC QUESTIONS ONLY — NO INFO-DUMPING):\n"
-            f"   - Answer ONLY the specific question asked by the representative. Do NOT recite the entire case briefing unsolicited.\n"
-            f"   - If asked for CA / Account number: Give ONLY the account number: '{id_val}'.\n"
-            f"   - If asked for registered phone number: Give ONLY '{phone}'.\n"
-            f"   - If asked for the disputed amount: State Rs {amt}.\n"
-            f"   - If asked what the issue/problem is: Summarize the grievance concisely in 1-2 sentences based on: {goal}.\n"
-            f"   - If asked what resolution is desired: State that {consumer_name} requests bill revision and reversal/refund of Rs {amt}.\n"
-            f"   - If representative refuses resolution: Firmly state that billing provisional amounts without meter inspection violates statutory consumer protection regulations, and this refusal is logged for Ombudsman escalation.\n"
-            f"   - If representative commits (offers refund/waiver/tech visit): Thank them, confirm the timeline and amount, and state that it is recorded on the ledger.\n\n"
-            f"3. LANGUAGE & GENDER MATCHING:\n"
-            f"   - Always speak as a female assistant. In Hindi, use 'kar rahi hoon', 'bol rahi hoon', 'samajh rahi hoon'.\n"
-            f"   - If the representative speaks in Hindi, respond in polite, natural conversational Hindi or Hinglish.\n"
-            f"   - If the representative speaks in English, respond in clear English.\n\n"
-            f"4. LENGTH & FORMAT:\n"
-            f"   - Keep your reply to 1 or 2 spoken sentences maximum.\n"
-            f"   - Speak conversationally. Never use markdown, bullet points, asterisks, or quotation marks."
+            f"CRITICAL DIRECTIVES FOR CALL CONVERSATION:\n"
+            f"1. DIRECT QUESTION ANSWERING ONLY: When the representative asks a question, answer ONLY that exact question factually from the docket. Never recite statutes or case essays unsolicited.\n"
+            f"   - If asked for account number: give only '{id_val}'.\n"
+            f"   - If asked for phone number: give only '{phone}'.\n"
+            f"   - If asked for consumer name: state you are Shivani, calling on behalf of '{consumer_name}'.\n"
+            f"   - If asked for disputed amount: state 'Rs {amt}'.\n"
+            f"   - If asked what happened / what the problem is: summarize concisely in 1 sentence based on '{goal}'.\n"
+            f"   - If asked to hold: politely say you are holding on the line.\n"
+            f"2. BREVITY: Keep your answer to 1 short conversational sentence (maximum 2).\n"
+            f"3. LANGUAGE: Match the language of the representative. If Hindi/Hinglish, speak feminine Hindi. If English, speak English.\n"
+            f"4. NO REPETITION: Never re-introduce yourself if you already did so."
         )
 
         user_content = (
             f"Conversation history:\n{transcript_str}\n\n"
             f"Representative just said: \"{rep_latest_text}\"\n\n"
-            f"Respond as {consumer_name}'s AI Personal Assistant:"
+            f"Respond directly as {consumer_name}'s female AI Personal Assistant (Shivani):"
         )
 
         payload = {
@@ -526,7 +507,7 @@ class SarvamExtractor:
                 {"role": "user", "content": user_content},
             ],
             "temperature": 0.2,
-            "max_tokens": 120,
+            "max_tokens": 100,
         }
 
         # --- HIGH-SPEED DUAL-ENGINE INFERENCE (<50ms Latency, 100% Factual Accuracy) ---
@@ -616,7 +597,14 @@ class SarvamExtractor:
             dispute_nature = "billing dispute"
 
         # 1. Refusal turn: instant statutory Ombudsman escalation warning
-        if is_refusal:
+        refusal_terms = [
+            "no refund", "cannot refund", "can't refund", "refuse", "not possible",
+            "refund nahi", "nahi hoga", "policy does not allow", "unable to process refund",
+            "denied", "not approved", "no compensation", "nothing can be done",
+            "nahi milega", "reject", "rejected", "cannot waive", "won't refund",
+            "not eligible", "cannot assist", "cannot promise"
+        ]
+        if is_refusal or any(t in lower_rep for t in refusal_terms):
             thought = (
                 f"Statutory Strategy: Representative rejected settlement. Cross-referencing {refusal_en}. "
                 f"Entering refusal into formal evidentiary record for escalation to {ombudsman_name}."
@@ -645,53 +633,173 @@ class SarvamExtractor:
                 spoken = f"Thank you representative. We have officially recorded your commitment for Rs {amt} on the ledger."
             return spoken, thought
 
-        # 3. Opening turn: instant 100% accurate introduction
+        # 3. Language Selection / IVR Prompt (e.g. "Hindi mein baat karne ke liye ek dabaen...")
+        is_lang_req = bool(re.search(
+            r"\b(ek\s*daba|do\s*daba|press\s*1|press\s*2|hindi\s*(?:mein|me)?\s*baat|english\s*(?:mein|me)?\s*baat|bhasha|language|bhasha\s*chune)\b",
+            lower_rep
+        ))
+        if is_lang_req:
+            thought = f"Autonomous Strategy: Responding to representative's language selection prompt."
+            if is_hindi:
+                spoken = (
+                    f"Namaste, hum Hindi mein hi baat karenge. Main {consumer_name} ki personal assistant Shivani bol rahi hoon, "
+                    f"aur yeh call unke {provider} ke Rs {amt} dispute ke regarding hai. Kripya account {id_val} check karein."
+                )
+            else:
+                spoken = (
+                    f"Hello, English is fine. I am Shivani, personal assistant to {consumer_name}. "
+                    f"I am calling regarding a dispute of Rs {amt} with {provider}. Could you please check account {id_val}?"
+                )
+            return spoken, thought
+
+        # 4. DIRECT QUESTION ANSWERING (Priority 1: Always answer rep's specific questions directly)
+
+        # 4.1 Identifier (CA / Account / Order ID / PNR / Policy Number / Claim Number / Meter / Customer ID)
+        is_acc_req = bool(re.search(
+            r"\b(ca|ca\s*no|ca\s*number|consumer\s*account|account\s*number|account\s*no|consumer\s*id|customer\s*id|khata\s*no|khata\s*number|khata|order\s*id|order\s*number|pnr|booking\s*id|policy\s*number|policy\s*no|claim\s*id|claim\s*number|student\s*id|enrollment|crn|trip\s*id|tenant\s*id|meter\s*number|meter\s*no|agreement\s*ref|tracking\s*id|identifier)\b",
+            lower_rep
+        ))
+        if is_acc_req:
+            thought = f"Autonomous Strategy: Supplying verified {id_type} '{id_val}' in response to representative question."
+            if is_hindi:
+                spoken = f"Unka {id_type} {id_val} hai. Kripya system mein check karein."
+            else:
+                spoken = f"His {id_type} is {id_val}. Please check this in your system."
+            return spoken, thought
+
+        # 4.2 Mobile / Phone number
+        is_phone_req = bool(re.search(
+            r"\b(phone|phone\s*number|mobile|mobile\s*number|contact\s*number|registered\s*number|registered\s*mobile|sampark)\b",
+            lower_rep
+        ))
+        if is_phone_req:
+            thought = f"Autonomous Strategy: Supplying registered consumer phone {phone}."
+            if is_hindi:
+                spoken = f"Unka registered mobile number {phone} hai."
+            else:
+                spoken = f"His registered mobile number is {phone}."
+            return spoken, thought
+
+        # 4.3 Caller / Consumer Name
+        is_name_req = bool(re.search(
+            r"\b(aapka\s*naam|consumer\s*naam|customer\s*naam|customer\s*name|consumer\s*name|kiske\s*behalf|kiska\s*account|who\s*is\s*calling|your\s*name|caller\s*name|naam\s*kya\s*hai)\b",
+            lower_rep
+        ))
+        if is_name_req:
+            thought = f"Autonomous Strategy: Supplying AI advocate identity and consumer name {consumer_name}."
+            if is_hindi:
+                spoken = f"Main consumer {consumer_name} ki personal assistant Shivani bol rahi hoon."
+            else:
+                spoken = f"I am Shivani, personal assistant to consumer {consumer_name}."
+            return spoken, thought
+
+        # 4.4 Disputed Amount
+        is_amt_req = bool(re.search(
+            r"\b(amount|disputed\s*amount|kitna|paise|rupaye|how\s*much|charges|refund\s*amount|bill\s*amount)\b",
+            lower_rep
+        ))
+        if is_amt_req:
+            thought = f"Autonomous Strategy: Stating disputed sum of Rs {amt} based on intake filing."
+            if is_hindi:
+                spoken = f"Disputed amount Rs {amt} hai."
+            else:
+                spoken = f"The disputed amount is Rs {amt}."
+            return spoken, thought
+
+        # 4.5 Ticket / Complaint Docket Reference
+        is_ticket_req = bool(re.search(
+            r"\b(ticket|ticket\s*number|complaint|complaint\s*number|docket|reference|sr\s*number)\b",
+            lower_rep
+        ))
+        if is_ticket_req:
+            thought = f"Autonomous Strategy: Supplying formal complaint docket #{ticket}."
+            if is_hindi:
+                spoken = f"Is dispute ka registered ticket reference number #{ticket} hai."
+            else:
+                spoken = f"The complaint ticket reference is #{ticket}."
+            return spoken, thought
+
+        # 4.6 Operator Asking to Hold / Checking System
+        is_ack = bool(re.search(
+            r"\b(see\s+the\s+dispute|can\s+see|looking\s+into|checking|one\s+moment|give\s+me\s+a\s+moment|hold\s*(?:on|pe|par|per|karein|kijiye|rakhen|rakhein)?|line\s*(?:par|pe)\s*(?:rahein|bani)|2\s*min(?:ut)?|do\s*minute|ek\s*min(?:ut)?|wait\s*karein|rukhiye|let\s*me\s*check|check\s*kar\s*(?:raha|rahi|lete|rahe)|dekh\s*(?:raha|rahi|lete|rahe)|details)\b",
+            lower_rep
+        ))
+        if is_ack:
+            thought = f"Autonomous Strategy: Operator requested brief hold or reviewing account details. Confirming holding on the line for account '{id_val}'."
+            if is_hindi:
+                spoken = f"Theek hai representative ji, main line par hold kar rahi hoon. Kripya account {id_val} check karke batayein."
+            else:
+                spoken = f"Sure representative, I am holding on the line. Please review account {id_val} and update us."
+            return spoken, thought
+
+        # 4.7 Problem / Issue explanation
+        is_prob_req = bool(re.search(
+            r"\b(problem|dikkat|issue|pareshani|kya\s*(?:hua|baat\s*hai)|explain|what\s*happened|reason\s*for\s*call|kis\s*liye\s*call|kya\s*mamla)\b",
+            lower_rep
+        ))
+        if is_prob_req:
+            thought = f"Autonomous Strategy: Providing factual synopsis of {dispute_nature} based on docket."
+            prob_desc = goal if len(goal) > 15 else (default_prob_hindi if is_hindi else default_prob_en)
+            if is_hindi:
+                spoken = f"{consumer_name} ke account par {prob_desc} Is Rs {amt} ke reversal ke liye call kiya hai."
+            else:
+                spoken = f"{prob_desc} We are requesting full reversal and resolution for Rs {amt}."
+            return spoken, thought
+
+        # 4.8 Desired resolution
+        is_res_req = bool(re.search(r"\b(resolution|want|chahte|samadhan|solution|settlement|kya\s*chahiye)\b", lower_rep))
+        if is_res_req:
+            thought = f"Autonomous Strategy: Demanding direct monetary restitution of Rs {amt}."
+            spoken = default_res_hindi if is_hindi else default_res_en
+            return spoken, thought
+
+        # 5. Opening turn: instant 100% accurate introduction
         if is_opening:
             thought = (
-                f"Statutory Strategy: Initiating telephony representation with {provider}. Introducing AI Personal "
-                f"Assistant for consumer {consumer_name} regarding {dispute_nature}."
+                f"Autonomous Strategy: Initiating representation with {provider}. Introducing AI Personal "
+                f"Assistant Shivani for consumer {consumer_name} regarding {dispute_nature}."
             )
             if is_follow_up:
                 if is_hindi:
                     spoken = (
-                        f"Namaste, main {consumer_name} ki AI personal assistant bol rahi hoon. "
+                        f"Namaste, main {consumer_name} ki personal assistant Shivani bol rahi hoon. "
                         f"Yeh call overdue Ticket #{ticket} ke follow-up ke regarding hai. "
                         f"Rs {amt} ka refund deadline nikalne ke baad bhi receive nahi hua hai. "
                         f"Hum Hindi ya English kisi mein bhi baat kar sakte hain."
                     )
                 else:
                     spoken = (
-                        f"Hello, I am {consumer_name}'s AI personal assistant. "
+                        f"Hello, I am Shivani, {consumer_name}'s personal assistant. "
                         f"I am calling to follow up on overdue Ticket #{ticket}. "
                         f"The promised refund of Rs {amt} was not received past the agreed deadline, and we require immediate settlement."
                     )
             elif is_hindi:
                 spoken = (
-                    f"Namaste, main {consumer_name} ki AI personal assistant bol rahi hoon. "
+                    f"Namaste, main {consumer_name} ki personal assistant Shivani bol rahi hoon. "
                     f"Yeh call unke {provider} {dispute_nature} ke regarding hai. "
                     f"Hum Hindi ya English kisi mein bhi baat kar sakte hain."
                 )
             else:
                 spoken = (
-                    f"Hello, I am {consumer_name}'s AI personal assistant. "
+                    f"Hello, I am Shivani, personal assistant to {consumer_name}. "
                     f"I am calling regarding {consumer_name}'s {provider} {dispute_nature}. "
                     f"English or Hindi works great, thank you."
                 )
             return spoken, thought
 
-        # 3.0 Representative Greeting or Assistance Offer AFTER introduction was already delivered
+        # 6. Representative Greeting or Assistance Offer AFTER introduction was already delivered
         is_rep_greeting = bool(re.search(
             r"\b(how\s*(?:may|can)\s*i\s*(?:help|assist)|welcome\s*to|swagat|sahayata|madad|kya\s*(?:madad|sahayata)|how\s*to\s*help|hello\b|namaste\b|good\s*(?:morning|afternoon|evening)|hi\b|boliye\b|tell\s*me\b)",
             lower_rep
         ))
         if is_rep_greeting and has_introduced:
             thought = (
-                f"Statutory Strategy: Representative opened floor / offered assistance. Stating grievance facts "
+                f"Autonomous Strategy: Representative opened floor / offered assistance. Stating grievance facts "
                 f"and requesting account check for {id_type} '{id_val}' without repeating introduction."
             )
             if is_hindi:
                 spoken = (
-                    f"Ji, main {consumer_name} ke {provider} {dispute_nature} ke regarding baat kar rahi hoon. "
+                    f"Ji representative ji, main {consumer_name} ke {provider} {dispute_nature} ke regarding baat kar rahi hoon. "
                     f"Disputed amount Rs {amt} hai. Kripya account number {id_val} check karein."
                 )
             else:
@@ -701,7 +809,7 @@ class SarvamExtractor:
                 )
             return spoken, thought
 
-        # 3.1 Statutory Counter-Negotiator: Coupon / Store credit diversion refusal
+        # 7. Corporate Evasion Tactics Confrontation (ONLY if representative is actively diverting/stalling)
         evasion_analysis = self.analyze_evasion_and_tactics(rep_latest_text, domain=case_info.get("domain", "telecom"))
         tactic = evasion_analysis["tactic"]
 
@@ -712,39 +820,35 @@ class SarvamExtractor:
             )
             if is_hindi:
                 spoken = (
-                    f"Representative ji, Consumer Protection Act ke Section 2(47) ke mutabik unauthorized charges ke badle "
-                    f"coupon ya wallet points dena unfair trade practice hai. Consumer {consumer_name} ko seedhe unke original "
+                    f"Representative ji, Consumer Protection Act ke mutabik unauthorized charges ke badle "
+                    f"coupon ya wallet points dena allowed nahi hai. Consumer {consumer_name} ko unke original "
                     f"payment source mein Rs {amt} ka direct refund chahiye."
                 )
             else:
                 spoken = (
                     f"Representative, under Section 2(47) of the Consumer Protection Act 2019, unauthorized service deductions "
                     f"cannot be settled with restricted promotional coupons or wallet credits. Consumer {consumer_name} explicitly "
-                    f"demands a direct refund of Rs {amt} to his original payment source within statutory timelines."
+                    f"demands a direct refund of Rs {amt} to original payment source."
                 )
             return spoken, thought
 
         if tactic == "vague_hedging":
             thought = (
-                f"Statutory Strategy: Tactic detected — Vague Hedging. Non-committal deflection violates citizen charter turnaround rules. "
-                f"Pressing representative for an exact binding turnaround date."
+                f"Statutory Strategy: Tactic detected — Vague Hedging. Pressing representative for an exact binding turnaround date."
             )
             if is_hindi:
                 spoken = (
-                    f"Representative ji, 'try karenge' kehna statutory SLA compliance nahi hai. Kripya ek firm timeline confirm "
-                    f"karein: kya yeh Rs {amt} agle 3 se 5 business days mein credit hoga, haan ya na?"
+                    f"Representative ji, kripya ek firm timeline confirm karein: kya yeh Rs {amt} agle 3 se 5 business days mein credit hoga, haan ya na?"
                 )
             else:
                 spoken = (
-                    f"Representative, vague assurances do not meet regulatory compliance. Under statutory turnaround mandates, "
-                    f"we require a firm commitment: will this Rs {amt} refund be credited within 3 to 5 business days, yes or no?"
+                    f"Representative, under statutory turnaround mandates, we require a firm commitment: will this Rs {amt} refund be credited within 3 to 5 business days, yes or no?"
                 )
             return spoken, thought
 
         if tactic == "procedural_stalling":
             thought = (
-                f"Statutory Strategy: Tactic detected — Procedural Stalling. Representative attempting to defer consumer. "
-                f"Enforcing Citizen Charter Turnaround Mandate — refusing deferral and insisting on resolution under active docket #{ticket}."
+                f"Statutory Strategy: Tactic detected — Procedural Stalling. Insisting on resolution under active docket #{ticket}."
             )
             if is_hindi:
                 spoken = (
@@ -758,84 +862,8 @@ class SarvamExtractor:
                 )
             return spoken, thought
 
-        # 4. Identifier (CA / Account / Order / PNR / Policy / Claim / Student / Tenant / CRN)
-        is_acc_req = bool(re.search(
-            r"\b(ca|ca\s*no|ca\s*number|consumer\s*account|account\s*number|account\s*no|consumer\s*id|customer\s*id|khata\s*no|khata\s*number|khata|order|order\s*id|pnr|booking\s*id|policy|policy\s*number|policy\s*no|claim|claim\s*id|claim\s*number|student\s*id|enrollment|crn|trip\s*id|tenant\s*id|agreement\s*ref|tracking|identifier)\b",
-            lower_rep
-        ))
-        if is_acc_req:
-            thought = f"Statutory Strategy: Representative requested account verification. Supplying verified {id_type} '{id_val}'."
-            if id_val.lower() in last_advocate_text.lower():
-                if is_hindi:
-                    spoken = f"Ji, {id_type} {id_val} hai. Kripya system mein Rs {amt} ka dispute check karein."
-                else:
-                    spoken = f"Yes, {id_type} is {id_val}. Please check the system for the Rs {amt} dispute."
-            else:
-                if is_hindi:
-                    spoken = f"Unka {id_type} {id_val} hai."
-                else:
-                    spoken = f"His {id_type} is {id_val}."
-            return spoken, thought
-
-        # 5. Ticket / Complaint Docket Reference
-        is_ticket_req = bool(re.search(r"\b(ticket|ticket\s*number|complaint|complaint\s*number|docket|reference|sr\s*number)\b", lower_rep))
-        if is_ticket_req:
-            thought = f"Statutory Strategy: Representative requested complaint ticket. Providing formal docket #{ticket}."
-            if is_hindi:
-                spoken = f"Is dispute ka registered ticket reference number #{ticket} hai."
-            else:
-                spoken = f"The complaint ticket reference is #{ticket}."
-            return spoken, thought
-
-        # 6. Mobile / Phone number
-        is_phone_req = bool(re.search(r"\b(phone|phone\s*number|mobile|mobile\s*number|contact\s*number|registered\s*number|sampark)\b", lower_rep))
-        if is_phone_req:
-            thought = f"Statutory Strategy: Supplying registered consumer phone {phone}."
-            if is_hindi:
-                spoken = f"Unka registered mobile number {phone} hai."
-            else:
-                spoken = f"His registered mobile number is {phone}."
-            return spoken, thought
-
-        # 7. Disputed Amount
-        is_amt_req = bool(re.search(r"\b(amount|disputed\s*amount|kitna|paise|rupaye|how\s*much|charges|refund\s*amount)\b", lower_rep))
-        if is_amt_req:
-            thought = f"Statutory Strategy: Stating disputed sum of Rs {amt} based on intake filing."
-            if is_hindi:
-                spoken = f"Disputed amount Rs {amt} hai."
-            else:
-                spoken = f"The disputed amount is Rs {amt}."
-            return spoken, thought
-
-        # 8. Operator Asking to Hold / Reviewing Docket ("hold per rakhen", "checking", "one moment", "line par rahein")
-        is_ack = bool(re.search(
-            r"\b(see\s+the\s+dispute|can\s+see|looking\s+into|checking|one\s+moment|give\s+me\s+a\s+moment|hold\s*(?:on|pe|par|per|karein|kijiye|rakhen|rakhein)?|line\s*(?:par|pe)\s*(?:rahein|bani)|2\s*min(?:ut)?|do\s*minute|ek\s*min(?:ut)?|wait\s*karein|rukhiye|let\s*me\s*check|check\s*kar\s*(?:raha|rahi|lete|rahe)|dekh\s*(?:raha|rahi|lete|rahe)|details)\b",
-            lower_rep
-        ))
-        if is_ack:
-            thought = f"Statutory Strategy: Operator requested brief hold or reviewing account details. Politely confirming holding on the line for account '{id_val}'."
-            if is_hindi:
-                spoken = f"Theek hai representative ji, main line par hold kar rahi hoon. Kripya account {id_val} check karke batayein."
-            else:
-                spoken = f"Sure representative, I am holding on the line. Please review account {id_val} and update us."
-            return spoken, thought
-
-        # 9. Problem / Issue explanation
-        is_prob_req = bool(re.search(r"\b(problem|dikkat|issue|pareshani|kya\s+hua|explain|what\s+happened|reason\s+for\s+call)\b", lower_rep))
-        if is_prob_req:
-            thought = f"Statutory Strategy: Providing clear factual synopsis of {dispute_nature}."
-            spoken = default_prob_hindi if is_hindi else default_prob_en
-            return spoken, thought
-
-        # 10. Desired resolution
-        is_res_req = bool(re.search(r"\b(resolution|want|chahte|samadhan|solution|settlement)\b", lower_rep))
-        if is_res_req:
-            thought = f"Statutory Strategy: Demanding direct monetary restitution of Rs {amt}."
-            spoken = default_res_hindi if is_hindi else default_res_en
-            return spoken, thought
-
-        # For nuanced / conversational turns, query Sarvam LLM via persistent pooled connection
-        thought = f"Statutory Strategy: Formulating context-aware advocate response for {dispute_nature}."
+        # 8. For nuanced / conversational turns, query Sarvam LLM via persistent pooled connection
+        thought = f"Autonomous Strategy: Formulating context-aware advocate response for {dispute_nature}."
         try:
             url = f"{self.base_url}/chat/completions"
             client = _get_sarvam_client()

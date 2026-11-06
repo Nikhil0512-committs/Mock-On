@@ -202,10 +202,9 @@ export function useCallWebSocket(callId: string | null) {
           };
           appendUtterance(u);
 
-          // Audio playback: use synthesized WAV if provided.
-          // If audio_b64 is null (text-first fast path), audio arrives via audio_patch — no browser TTS fallback
-          // to avoid double audio when the patch arrives.
-          if (raw.audio_b64) {
+          // Audio playback: ONLY play synthesized speech for Shivani / AI Advocate ('user')
+          // Company representative speech is human/switchboard audio and must never be voice-read by our AI!
+          if (raw.audio_b64 && speaker === "user" && !isAudioMuted) {
             audioQueue.enqueue(raw.audio_b64 as string);
           }
           break;

@@ -25,10 +25,14 @@ import type { LiveUtterance } from "../types";
 
 export function deduplicateConsecutivePhrases(text: string): string {
   if (!text) return "";
-  let words = text.trim().split(/\s+/);
-  if (words.length < 2) return text.trim();
+  let trimmed = text.trim();
+  // Strip identical repeated chunks of length 8 to 250 characters
+  trimmed = trimmed.replace(/\b(.{8,250}?)\s+(?:\1\b\s*)+/gi, "$1 ");
 
-  const maxWindow = Math.min(Math.floor(words.length / 2), 30);
+  let words = trimmed.trim().split(/\s+/);
+  if (words.length < 2) return trimmed;
+
+  const maxWindow = Math.min(Math.floor(words.length / 2), 60);
   for (let pass = 0; pass < 3; pass++) {
     for (let window = maxWindow; window >= 1; window--) {
       const cleaned: string[] = [];
@@ -56,13 +60,14 @@ export function deduplicateConsecutivePhrases(text: string): string {
     }
   }
 
-  return words.join(" ");
+  return words.join(" ").trim();
 }
 
 class SequentialAudioQueue {
   private queue: string[] = [];
   public isPlaying = false;
   private currentAudio: HTMLAudioElement | null = null;
+  private playTimeout: any = null;
   public onStateChange: ((playing: boolean) => void) | null = null;
 
   enqueue(audioB64: string) {
@@ -73,6 +78,10 @@ class SequentialAudioQueue {
   }
 
   clear() {
+    if (this.playTimeout) {
+      clearTimeout(this.playTimeout);
+      this.playTimeout = null;
+    }
     if (this.currentAudio) {
       try {
         this.currentAudio.pause();
@@ -86,6 +95,11 @@ class SequentialAudioQueue {
   }
 
   private playNext() {
+    if (this.playTimeout) {
+      clearTimeout(this.playTimeout);
+      this.playTimeout = null;
+    }
+
     if (this.queue.length === 0) {
       this.isPlaying = false;
       this.currentAudio = null;
@@ -105,17 +119,26 @@ class SequentialAudioQueue {
       const audio = new Audio("data:audio/wav;base64," + nextB64);
       this.currentAudio = audio;
 
-      audio.onended = () => {
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        if (this.playTimeout) {
+          clearTimeout(this.playTimeout);
+          this.playTimeout = null;
+        }
         this.playNext();
       };
 
-      audio.onerror = () => {
-        this.playNext();
-      };
+      audio.onended = finish;
+      audio.onerror = finish;
+
+      // 8-second safety watchdog so queue never freezes playback state
+      this.playTimeout = setTimeout(finish, 8000);
 
       audio.play().catch((err) => {
         console.warn("Audio playback interrupted or blocked:", err);
-        this.playNext();
+        finish();
       });
     } catch {
       this.playNext();
@@ -214,17 +237,18 @@ export default function SwitchboardPage() {
           return;
         }
 
-        let interim = "";
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
+        let finalTranscript = "";
+        let interimTranscript = "";
+        for (let i = 0; i < event.results.length; i++) {
           const res = event.results[i];
           if (res.isFinal) {
-            accumulatedTurnTextRef.current += (accumulatedTurnTextRef.current ? " " : "") + res[0].transcript.trim();
+            finalTranscript += (finalTranscript ? " " : "") + res[0].transcript.trim();
           } else {
-            interim += res[0].transcript;
+            interimTranscript += res[0].transcript;
           }
         }
 
-        const rawCombined = (accumulatedTurnTextRef.current + " " + interim).trim();
+        const rawCombined = (finalTranscript + " " + interimTranscript).trim();
         const clean = deduplicateConsecutivePhrases(rawCombined);
 
         if (clean) {
@@ -232,7 +256,7 @@ export default function SwitchboardPage() {
           setIsSpeaking(true);
         }
 
-        // Auto-send debounce after 1200ms of natural silence
+        // Auto-send debounce after 650ms of natural silence (fast, responsive)
         if (autoSendVoice && clean.length >= 2) {
           if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
           silenceTimerRef.current = setTimeout(() => {
@@ -245,7 +269,7 @@ export default function SwitchboardPage() {
               setMessageInput("");
               handleSendMessage(toSend);
             }
-          }, 1200);
+          }, 650);
         }
       };
 

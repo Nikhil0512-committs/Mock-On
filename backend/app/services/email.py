@@ -165,9 +165,18 @@ class EmailService:
         promises_html = ""
         if promises:
             for p in promises:
-                p_amount = f"₹{p.get('amount')}" if p.get('amount') else amount_str
-                p_type = p.get('type', 'Refund Commitment').replace('_', ' ').title()
-                p_due = p.get('deadline_phrase') or due_date_str
+                if isinstance(p, dict):
+                    p_amount = f"₹{p.get('amount')}" if p.get('amount') else amount_str
+                    p_type = p.get('type', 'Refund Commitment').replace('_', ' ').title()
+                    p_due = p.get('deadline_phrase') or due_date_str
+                elif hasattr(p, 'amount'):
+                    p_amount = f"₹{getattr(p, 'amount', '')}" or amount_str
+                    p_type = getattr(p, 'commitment_type', 'Refund Commitment').replace('_', ' ').title()
+                    p_due = getattr(p, 'raw_date_phrase', None) or due_date_str
+                else:
+                    p_amount = amount_str
+                    p_type = str(p)
+                    p_due = due_date_str
                 promises_html += f"""
                 <tr style="border-bottom: 1px solid #e2e8f0;">
                     <td style="padding: 10px 14px; font-weight: 600; color: #1e293b;">{p_type}</td>
