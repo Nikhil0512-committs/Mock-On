@@ -511,6 +511,19 @@ async def send_call_message(
     }
 
 
+@router.get("/case/{case_id}/latest", response_model=Optional[CallRead])
+async def get_latest_call_for_case(case_id: str, db: AsyncSession = Depends(get_db)):
+    """Fetch the latest active, ringing, or recent call for a case."""
+    stmt = (
+        select(Call)
+        .where(Call.case_id == case_id)
+        .order_by(Call.created_at.desc())
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
 @router.get("/{call_id}", response_model=CallRead)
 async def get_call(call_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Call).where(Call.id == call_id))

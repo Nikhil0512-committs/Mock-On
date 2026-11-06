@@ -123,6 +123,8 @@ export const callsApi = {
   start: (data: { case_id: string; scenario_id?: string }) =>
     api.post<Call>("/calls", data).then((r) => r.data),
   get: (id: string) => api.get<Call>(`/calls/${id}`).then((r) => r.data),
+  getLatestForCase: (caseId: string) =>
+    api.get<Call | null>(`/calls/case/${caseId}/latest`).then((r) => r.data),
   end: (id: string, payload?: { reason?: string }) =>
     api
       .post<{ status: string; call_id: string; has_conclusion: boolean; reason?: string }>(

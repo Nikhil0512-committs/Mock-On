@@ -349,7 +349,16 @@ function resolveHelpline(providerName: string, domainDefaultProvider: string) {
 
 export default function IntakePage() {
   const navigate = useNavigate();
-  const { setActiveCase, setActiveCall, clearUtterances, clearProposals, currentUser } = useStore();
+  const {
+    setActiveCase,
+    setActiveCall,
+    clearUtterances,
+    clearProposals,
+    setCallStatus,
+    setCallEndInfo,
+    setIsOnHold,
+    currentUser,
+  } = useStore();
 
   const [domainKey, setDomainKey] = useState("telecom");
   const selectedDomain = DOMAINS.find((d) => d.id === domainKey) || DOMAINS[3];
@@ -452,6 +461,9 @@ export default function IntakePage() {
     setError("");
     clearUtterances();
     clearProposals();
+    setCallEndInfo(null);
+    setIsOnHold(false);
+    setCallStatus(callMode === "switchboard" ? "ringing" : "initialising");
 
     const randomSuffix = Math.floor(10000 + Math.random() * 90000);
     const generatedTicket = `TKT-${new Date().getFullYear()}-${randomSuffix}`;
@@ -495,12 +507,16 @@ export default function IntakePage() {
           scenario_id: "live_switchboard",
         });
         setActiveCall(call);
+        setCallStatus("ringing");
+        setCallEndInfo(null);
       } else {
         const call = await callsApi.start({
           case_id: case_.id,
           scenario_id: `${selectedDomain.id}_dispute_v1`,
         });
         setActiveCall(call);
+        setCallStatus("active");
+        setCallEndInfo(null);
       }
 
       navigate("/call");

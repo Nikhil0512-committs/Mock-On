@@ -176,11 +176,14 @@ export default function CallPage() {
 
   const {
     activeCall,
+    setActiveCall,
     activeCase,
     setActiveCase,
     utterances,
     callStatus,
+    setCallStatus,
     callEndInfo,
+    setCallEndInfo,
     isOnHold,
     pendingProposals,
     removeProposal,
@@ -193,14 +196,55 @@ export default function CallPage() {
 
   useCallWebSocket(activeCall?.id ?? null);
 
+  // Sync callStatus when activeCall changes
+  useEffect(() => {
+    if (activeCall) {
+      if (
+        activeCall.status === "ringing" ||
+        activeCall.status === "active" ||
+        activeCall.status === "initialising"
+      ) {
+        setCallStatus(activeCall.status);
+        setCallEndInfo(null);
+        setSummaryModalOpen(false);
+      }
+    }
+  }, [activeCall?.id]);
+
+  // If activeCase is set but activeCall is null (e.g. page refresh), fetch latest call for case
+  useEffect(() => {
+    if (activeCase && !activeCall) {
+      callsApi
+        .getLatestForCase(activeCase.id)
+        .then((latestCall) => {
+          if (latestCall) {
+            setActiveCall(latestCall);
+            if (
+              latestCall.status === "ringing" ||
+              latestCall.status === "active" ||
+              latestCall.status === "initialising"
+            ) {
+              setCallStatus(latestCall.status);
+              setCallEndInfo(null);
+              setSummaryModalOpen(false);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [activeCase?.id, activeCall]);
+
   // If no active case in store, try fetching the most recent case from API
   useEffect(() => {
     if (!activeCase) {
-      casesApi.list().then((list) => {
-        if (list && list.length > 0) {
-          setActiveCase(list[0]);
-        }
-      }).catch(() => {});
+      casesApi
+        .list()
+        .then((list) => {
+          if (list && list.length > 0) {
+            setActiveCase(list[0]);
+          }
+        })
+        .catch(() => {});
     }
   }, [activeCase, setActiveCase]);
 
@@ -211,12 +255,18 @@ export default function CallPage() {
     }
   }, [utterances]);
 
-  // Refresh promises when call ends
+  // Refresh promises and open summary modal ONLY when call actively transitions to ended
+  const prevCallStatusRef = useRef(callStatus);
   useEffect(() => {
-    if (callStatus === "ended" && activeCase) {
+    if (
+      (prevCallStatusRef.current === "active" || prevCallStatusRef.current === "ringing") &&
+      callStatus === "ended" &&
+      activeCase
+    ) {
       promisesApi.listForCase(activeCase.id).then(setPromises).catch(() => {});
       setSummaryModalOpen(true);
     }
+    prevCallStatusRef.current = callStatus;
   }, [callStatus, activeCase, setPromises]);
 
   const handleEndCall = async () => {
@@ -568,7 +618,27 @@ export default function CallPage() {
               </div>
             )}
 
-            {utterances.length === 0 && !isOnHold && callStatus !== "ringing" && (
+            {utterances.length === 0 && !isOnHold && callStatus === "active" && (
+              <div className="p-6 rounded-3xl bg-emerald-500/10 border-2 border-emerald-500/40 text-center space-y-3 animate-pulse my-6">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center mx-auto text-emerald-300">
+                  <PhoneCall className="w-6 h-6 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold text-sm">
+                    Connected with {provider} Support Desk
+                  </h3>
+                  <div className="text-[11px] font-mono text-emerald-300/90 flex items-center justify-center gap-1.5 my-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    <span>Live Telephony Audio Channel Active</span>
+                  </div>
+                  <p className="text-xs text-white/60 max-w-sm mx-auto mt-1 leading-relaxed">
+                    Company support specialist has answered the line. Mock-On AI Advocate (Shivani) is actively negotiating and advocating on your behalf.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {utterances.length === 0 && !isOnHold && callStatus !== "ringing" && callStatus !== "active" && (
               <div className="text-center py-20 text-white/40 space-y-4">
                 <div className="w-14 h-14 rounded-2xl bg-brand-500/10 border border-brand-500/25 flex items-center justify-center mx-auto text-brand-400">
                   <Wifi className="w-7 h-7" />

@@ -178,10 +178,13 @@ export function useCallWebSocket(callId: string | null) {
 
         case "ringing":
           setCallStatus("ringing");
+          setCallEndInfo(null);
           break;
 
         case "call_accepted":
           setCallStatus("active");
+          setCallEndInfo(null);
+          setIsOnHold(false);
           break;
 
         case "utterance": {
@@ -279,29 +282,51 @@ export function useCallWebSocket(callId: string | null) {
   useEffect(() => {
     if (!callId) return;
 
-    const url = `${WS_BASE}/ws/calls/${callId}`;
-    const socket = new WebSocket(url);
-    ws.current = socket;
+    let socket: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let destroyed = false;
 
-    socket.onmessage = (e) => {
-      try {
-        const event = JSON.parse(e.data) as WSEvent;
-        handleEvent(event);
-      } catch {
-        // ignore malformed messages
-      }
+    const connect = () => {
+      if (destroyed) return;
+      const url = `${WS_BASE}/ws/calls/${callId}`;
+      socket = new WebSocket(url);
+      ws.current = socket;
+
+      socket.onopen = () => {
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
+      };
+
+      socket.onmessage = (e) => {
+        try {
+          const event = JSON.parse(e.data) as WSEvent;
+          handleEvent(event);
+        } catch {
+          // ignore malformed messages
+        }
+      };
+
+      socket.onclose = () => {
+        ws.current = null;
+        if (!destroyed) {
+          reconnectTimer = setTimeout(connect, 1500);
+        }
+      };
+
+      socket.onerror = (e) => {
+        console.error("WebSocket error", e);
+        socket?.close();
+      };
     };
 
-    socket.onclose = () => {
-      ws.current = null;
-    };
-
-    socket.onerror = (e) => {
-      console.error("WebSocket error", e);
-    };
+    connect();
 
     return () => {
-      socket.close();
+      destroyed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      socket?.close();
       ws.current = null;
       audioQueue.clear();
     };
