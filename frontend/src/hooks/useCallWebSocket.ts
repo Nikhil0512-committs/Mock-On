@@ -199,16 +199,21 @@ export function useCallWebSocket(callId: string | null) {
           };
           appendUtterance(u);
 
-          // Audio playback: use synthesized WAV if provided, otherwise browser speech synthesis fallback
+          // Audio playback: use synthesized WAV if provided.
+          // If audio_b64 is null (text-first fast path), audio arrives via audio_patch — no browser TTS fallback
+          // to avoid double audio when the patch arrives.
           if (raw.audio_b64) {
             audioQueue.enqueue(raw.audio_b64 as string);
-          } else if (typeof window !== "undefined" && "speechSynthesis" in window && !isAudioMuted && text) {
-            try {
-              const utter = new SpeechSynthesisUtterance(text);
-              utter.rate = 1.05;
-              utter.pitch = speaker === "user" ? 1.0 : 1.1;
-              window.speechSynthesis.speak(utter);
-            } catch {}
+          }
+          break;
+        }
+
+        case "audio_patch": {
+          // TTS audio for a previously displayed utterance arrives here (text-first fast path).
+          const rawEv = (event.data || event) as Record<string, unknown>;
+          const audioPatchB64 = (rawEv.audio_b64 as string) || ((event as any).audio_b64 as string);
+          if (audioPatchB64 && !isAudioMuted) {
+            audioQueue.enqueue(audioPatchB64);
           }
           break;
         }

@@ -357,115 +357,123 @@ export default function SwitchboardPage() {
     return () => clearInterval(interval);
   }, [activeCallItem?.call.id]);
 
-  // Connect to the WebSocket when an active call is selected
+  // Connect to the WebSocket when an active call is selected, with auto-reconnect
   useEffect(() => {
     if (!activeCallItem) return;
 
     const callId = activeCallItem.call.id;
-    const ws = new WebSocket(`${WS_BASE}/ws/calls/${callId}`);
-    wsRef.current = ws;
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let destroyed = false;
 
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === "utterance") {
-          const raw = msg.data || msg;
-          const text = (raw.text || "").trim();
-          const speaker = raw.speaker || "agent";
-          setTranscript((prev) => {
-            const last = prev[prev.length - 1];
-            if (last && last.speaker === speaker && last.text.trim().toLowerCase() === text.toLowerCase()) {
-              return prev; // Deduplicate consecutive identical utterances
-            }
-            if (raw.id && prev.some((u) => u.id === raw.id)) {
-              return prev;
-            }
-            // Guard: In a live 2-way call, AI Advocate ('user') should never send two consecutive turns.
-            // If the last utterance is already from 'user' and new utterance is also from 'user',
-            // update/replace the last turn rather than stacking a duplicate introduction!
-            if (speaker === "user" && last && last.speaker === "user") {
-              const updated = [...prev];
-              updated[updated.length - 1] = {
-                ...last,
-                id: raw.id || last.id,
-                text,
-                thought_process: raw.thought_process || (last as any).thought_process,
-              };
-              return updated;
-            }
-            return [
-              ...prev,
-              {
-                id: raw.id || `u-${Date.now()}`,
-                speaker,
-                text,
-                thought_process: raw.thought_process,
-                isFinal: true,
-                latencyMs: raw.latencyMs,
-                sequence: Date.now(),
-              },
-            ];
-          });
+    const connect = () => {
+      if (destroyed) return;
+      ws = new WebSocket(`${WS_BASE}/ws/calls/${callId}`);
+      wsRef.current = ws;
 
-          // Audio voice output: play Advocate AI speech out loud for the representative!
-          // Note: If audio_b64 is null/absent (text-first fast path), audio arrives via audio_patch event.
-          if (speaker === "user" && text) {
-            if (raw.audio_b64) {
+      ws.onopen = () => {
+        // Connection established — clear any pending reconnect timer
+        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+
+          // Keepalive: respond to server pings so the 30s timeout doesn't drop us
+          if (msg.type === "ping") {
+            ws?.send(JSON.stringify({ type: "pong" }));
+            return;
+          }
+
+          if (msg.type === "utterance") {
+            const raw = msg.data || msg;
+            const text = (raw.text || "").trim();
+            const speaker = raw.speaker || "agent";
+            setTranscript((prev) => {
+              const last = prev[prev.length - 1];
+              if (last && last.speaker === speaker && last.text.trim().toLowerCase() === text.toLowerCase()) {
+                return prev; // Deduplicate consecutive identical utterances
+              }
+              if (raw.id && prev.some((u) => u.id === raw.id)) {
+                return prev;
+              }
+              // Guard: In a live 2-way call, AI Advocate ('user') should never send two consecutive turns.
+              // If the last utterance is already from 'user' and new utterance is also from 'user',
+              // update/replace the last turn rather than stacking a duplicate introduction!
+              if (speaker === "user" && last && last.speaker === "user") {
+                const updated = [...prev];
+                updated[updated.length - 1] = {
+                  ...last,
+                  id: raw.id || last.id,
+                  text,
+                  thought_process: raw.thought_process || (last as any).thought_process,
+                };
+                return updated;
+              }
+              return [
+                ...prev,
+                {
+                  id: raw.id || `u-${Date.now()}`,
+                  speaker,
+                  text,
+                  thought_process: raw.thought_process,
+                  isFinal: true,
+                  latencyMs: raw.latencyMs,
+                  sequence: Date.now(),
+                },
+              ];
+            });
+
+            // Audio voice output: play Advocate AI speech out loud for the representative!
+            // If audio_b64 is present on the utterance event itself, play it directly.
+            // If null (text-first fast path), the audio arrives separately via audio_patch — do NOT
+            // fall back to browser TTS here or we'll get double audio when the patch arrives.
+            if (speaker === "user" && text && raw.audio_b64) {
               switchboardAudioQueue.enqueue(raw.audio_b64 as string);
-            } else if (typeof window !== "undefined" && "speechSynthesis" in window) {
-              try {
-                const utter = new SpeechSynthesisUtterance(text);
-                utter.rate = 1.05;
-                utter.onstart = () => {
-                  setIsAdvocateSpeaking(true);
-                  if (recognitionRef.current) {
-                    try {
-                      recognitionRef.current.onresult = null;
-                      recognitionRef.current.onerror = null;
-                      recognitionRef.current.onend = null;
-                      recognitionRef.current.stop();
-                    } catch (_) {}
-                    recognitionRef.current = null;
-                  }
-                  setIsSpeaking(false);
-                  accumulatedTurnTextRef.current = "";
-                };
-                utter.onend = () => {
-                  setIsAdvocateSpeaking(false);
-                  setTimeout(() => {
-                    if (isListeningRef.current && !switchboardAudioQueue.isPlaying) {
-                      accumulatedTurnTextRef.current = "";
-                      startRecognition();
-                    }
-                  }, 500);
-                };
-                window.speechSynthesis.speak(utter);
-              } catch {}
             }
+          } else if (msg.type === "audio_patch") {
+            // TTS audio for the already-displayed advocate utterance arrives here.
+            // Enqueue for sequential playback; the SequentialAudioQueue handles mic muting via onStateChange.
+            if (msg.audio_b64) {
+              switchboardAudioQueue.enqueue(msg.audio_b64 as string);
+            }
+          } else if (msg.type === "promise_proposed") {
+            const prop = msg.proposal?.promise_data || msg.proposal;
+            setLastPromise(prop);
+          } else if (msg.type === "radar_update") {
+            if (msg.data?.status === "refused") {
+              setRefusalDetected(msg.data?.detail || "Representative refused settlement");
+            }
+          } else if (msg.type === "call_ended") {
+            switchboardAudioQueue.clear();
+            setActiveCallItem(null);
           }
-        } else if (msg.type === "audio_patch") {
-          // Fast-path: text was already delivered; now play the TTS audio for the advocate turn.
-          if (msg.audio_b64) {
-            switchboardAudioQueue.enqueue(msg.audio_b64 as string);
-          }
-        } else if (msg.type === "promise_proposed") {
-          const prop = msg.proposal?.promise_data || msg.proposal;
-          setLastPromise(prop);
-        } else if (msg.type === "radar_update") {
-          if (msg.data?.status === "refused") {
-            setRefusalDetected(msg.data?.detail || "Representative refused settlement");
-          }
-        } else if (msg.type === "call_ended") {
-          switchboardAudioQueue.clear();
-          setActiveCallItem(null);
+        } catch (err) {
+          console.error("WS parse error:", err);
         }
-      } catch (err) {
-        console.error("WS parse error:", err);
-      }
+      };
+
+      ws.onclose = () => {
+        wsRef.current = null;
+        // Auto-reconnect after 1.5s if the call is still active and not destroyed
+        if (!destroyed && activeCallItem) {
+          reconnectTimer = setTimeout(connect, 1500);
+        }
+      };
+
+      ws.onerror = () => {
+        // onerror is always followed by onclose; reconnect handled there
+        ws?.close();
+      };
     };
 
+    connect();
+
     return () => {
-      ws.close();
+      destroyed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      ws?.close();
       wsRef.current = null;
       switchboardAudioQueue.clear();
     };

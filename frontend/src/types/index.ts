@@ -116,6 +116,7 @@ export type WSEventType =
   | "processing"
   | "transcript_final"
   | "utterance"
+  | "audio_patch"
   | "promise_proposed"
   | "radar_update"
   | "evasion_radar"
