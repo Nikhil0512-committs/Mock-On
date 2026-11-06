@@ -26,7 +26,28 @@ import type { LiveUtterance } from "../types";
 export function deduplicateConsecutivePhrases(text: string): string {
   if (!text) return "";
   let trimmed = text.trim();
-  // Strip identical repeated chunks of length 8 to 250 characters
+
+  // 1. Detect if the text repeatedly restarts with its own opening phrase (speech-recognition buffer accumulation)
+  const initialWords = trimmed.split(/\s+/);
+  if (initialWords.length >= 8) {
+    for (let win = Math.min(12, Math.floor(initialWords.length / 2)); win >= 4; win--) {
+      const prefix = initialWords.slice(0, win).map((w) => w.toLowerCase()).join(" ");
+      const matches: number[] = [];
+      for (let i = 0; i <= initialWords.length - win; i++) {
+        const sub = initialWords.slice(i, i + win).map((w) => w.toLowerCase()).join(" ");
+        if (sub === prefix) {
+          matches.push(i);
+        }
+      }
+      if (matches.length > 1) {
+        const lastIdx = matches[matches.length - 1];
+        trimmed = initialWords.slice(lastIdx).join(" ");
+        break;
+      }
+    }
+  }
+
+  // 2. Strip identical repeated chunks of length 8 to 250 characters
   trimmed = trimmed.replace(/\b(.{8,250}?)\s+(?:\1\b\s*)+/gi, "$1 ");
 
   let words = trimmed.trim().split(/\s+/);
@@ -263,8 +284,16 @@ export default function SwitchboardPage() {
             setIsSpeaking(false);
             const toSend = clean.trim();
             if (toSend.length >= 2) {
-              // Clear buffer immediately so the subsequent recognition restart
-              // cannot replay the same words into the new session.
+              // Teardown recognition immediately so Chrome does not retain internal event.results
+              if (recognitionRef.current) {
+                try {
+                  recognitionRef.current.onresult = null;
+                  recognitionRef.current.onerror = null;
+                  recognitionRef.current.onend = null;
+                  recognitionRef.current.stop();
+                } catch (_) {}
+                recognitionRef.current = null;
+              }
               accumulatedTurnTextRef.current = "";
               setMessageInput("");
               handleSendMessage(toSend);

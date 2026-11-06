@@ -45,7 +45,8 @@ export default function CallSummaryModal({
 
   if (!isOpen || !caseData) return null;
 
-  const isResolved = hasConclusion && promises.length > 0;
+  const hasAnyPromises = Boolean(promises && promises.length > 0);
+  const isResolved = Boolean(hasConclusion) || hasAnyPromises;
   const reasonText =
     endReason ||
     "The call ended midway before the company representative could confirm a resolution or commitment.";
@@ -184,7 +185,11 @@ export default function CallSummaryModal({
                   isResolved ? "text-brand-300 font-mono" : "text-amber-300"
                 }`}
               >
-                {isResolved ? ticketNo : "0 Promises (Inconclusive)"}
+                {isResolved
+                  ? promises.length > 0
+                    ? `${promises.length} Commitment${promises.length > 1 ? "s" : ""}`
+                    : "Refund Promised"
+                  : "0 Promises (Inconclusive)"}
               </div>
             </div>
           </div>

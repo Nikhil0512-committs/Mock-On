@@ -263,8 +263,17 @@ export default function CallPage() {
       callStatus === "ended" &&
       activeCase
     ) {
-      promisesApi.listForCase(activeCase.id).then(setPromises).catch(() => {});
-      setSummaryModalOpen(true);
+      promisesApi
+        .listForCase(activeCase.id)
+        .then((fetched) => {
+          if (fetched && fetched.length > 0) {
+            setPromises(fetched);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          setSummaryModalOpen(true);
+        });
     }
     prevCallStatusRef.current = callStatus;
   }, [callStatus, activeCase, setPromises]);
@@ -295,6 +304,11 @@ export default function CallPage() {
       const updated = await promisesApi.listForCase(activeCase.id).catch(() => []);
       setPromises(updated);
     }
+
+    // Autonomous Agent: When a refund commitment is confirmed, autonomously conclude the call session
+    if (confirm && activeCall && callStatus === "active") {
+      callsApi.end(activeCall.id, { reason: "Autonomous Resolution: Refund commitment confirmed" }).catch(() => {});
+    }
   };
 
   const statusColour = {
@@ -317,7 +331,9 @@ export default function CallPage() {
   const ticketNumber = (caseInfo.ticket_number as string) || (activeCase ? `TKT-${activeCase.id.slice(0, 8).toUpperCase()}` : "");
   const currentPromises = useStore((s) => s.promises);
   const isCallResolved =
-    (callEndInfo?.hasConclusion ?? (currentPromises.length > 0)) && currentPromises.length > 0;
+    Boolean(callEndInfo?.hasConclusion) ||
+    currentPromises.length > 0 ||
+    pendingProposals.length > 0;
 
   const getSlaDetails = () => {
     switch (domain) {
@@ -1070,7 +1086,25 @@ export default function CallPage() {
             isOpen={summaryModalOpen}
             onClose={() => setSummaryModalOpen(false)}
             caseData={activeCase}
-            promises={useStore.getState().promises}
+            promises={
+              currentPromises.length > 0
+                ? currentPromises
+                : pendingProposals.length > 0
+                ? (pendingProposals.map((p, idx) => {
+                    const pd = (p.promise_data || p) as any;
+                    return {
+                      id: `prop-${idx}`,
+                      case_id: activeCase.id,
+                      commitment_type: pd.commitment_type || "refund",
+                      amount: pd.amount,
+                      raw_date_phrase: pd.raw_date_phrase || "5 business days",
+                      user_confirmed: true,
+                      status: "confirmed",
+                      created_at: new Date().toISOString(),
+                    };
+                  }) as any)
+                : []
+            }
             hasConclusion={isCallResolved}
             endReason={callEndInfo?.reason}
             onOpenFamilyModal={() => setFamilyModalOpen(true)}

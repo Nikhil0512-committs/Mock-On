@@ -147,7 +147,7 @@ async def resend_summary(case_id: str, db: AsyncSession = Depends(get_db)):
         or (case.approved_info or {}).get("contact_email")
         or (case.approved_info or {}).get("email")
     )
-    if not target_email or "@" not in target_email:
+    if not target_email or "@" not in target_email or any(d in target_email.lower() for d in ["@mockon.ai", "@example.com", "@test.com", "@mock.com"]):
         target_email = settings.smtp_user
 
     p_res = await db.execute(select(Promise).where(Promise.case_id == case.id))

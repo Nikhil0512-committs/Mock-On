@@ -534,6 +534,29 @@ async def send_call_message(
                             })
                         except Exception as e:
                             logger.debug(f"Advocate TTS synthesis failed (text already delivered): {e}")
+
+                        # ── AUTONOMOUS CALL TERMINATION ON CONFIRMED REFUND ──────────────
+                        # When a refund or settlement commitment is detected from the representative,
+                        # the AI Personal Agent autonomously locks the commitment into the ledger
+                        # and concludes the call automatically without requiring manual hangup.
+                        if promise_detected:
+                            logger.info(
+                                f"Autonomous Agent: Refund commitment logged on call {call_id}. "
+                                "Scheduling automatic call conclusion after concluding turn."
+                            )
+                            async def auto_conclude_after_turn():
+                                # Allow time for Shivani's concluding utterance and TTS audio to play
+                                await asyncio.sleep(3.5)
+                                try:
+                                    await execute_call_end(
+                                        call_id,
+                                        reason="Autonomous Resolution: Settlement commitment confirmed by representative",
+                                    )
+                                    logger.info(f"Autonomous Agent successfully concluded call {call_id}.")
+                                except Exception as auto_end_err:
+                                    logger.error(f"Error during autonomous call conclusion: {auto_end_err}", exc_info=True)
+
+                            asyncio.create_task(auto_conclude_after_turn())
                 except Exception as adv_err:
                     logger.error(f"Error generating advocate reply on call {call_id}: {adv_err}", exc_info=True)
 
@@ -573,6 +596,129 @@ class EndCallPayload(BaseModel):
     reason: Optional[str] = None
 
 
+async def execute_call_end(call_id: str, reason: Optional[str] = None) -> dict:
+    """Core logic to end a call session, lock commitments, evaluate conclusion, and dispatch emails."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(Call).where(Call.id == call_id))
+        call = result.scalar_one_or_none()
+        if not call:
+            return {"status": "error", "message": "Call not found"}
+
+        if call.status == "ended":
+            return {"status": "ended", "call_id": call_id}
+
+        manager.cancel_task(call_id)
+        _call_advocate_locks.pop(call_id, None)
+        call.status = "ended"
+        call.ended_at = datetime.now(timezone.utc)
+
+        # Auto-confirm any promises extracted on the call so they are locked into evidence and tracked by deadline worker
+        unconfirmed = await db.execute(
+            select(Promise).where(Promise.case_id == call.case_id, Promise.user_confirmed == False)
+        )
+        for p in unconfirmed.scalars().all():
+            p.user_confirmed = True
+            p.user_confirmation_timestamp = datetime.now(timezone.utc)
+            p.follow_up_allowed = True
+            if not p.due_at:
+                p.due_at = datetime.now(timezone.utc) + timedelta(days=5)
+        await db.commit()
+
+        # Determine whether a genuine commitment or resolution was logged
+        from app.services.ledger import ledger
+        confirmed_promises = await ledger.get_promises_for_case(db, call.case_id)
+
+        c_res = await db.execute(select(Case).where(Case.id == call.case_id))
+        case = c_res.scalar_one_or_none()
+        info = case.approved_info if case else {}
+        provider = info.get("service_provider") or "Customer Care"
+
+        # Pull all call utterances to let our female AI Personal Agent (Shivani) autonomously evaluate the call
+        u_res = await db.execute(
+            select(Utterance)
+            .where(Utterance.call_id == call_id)
+            .order_by(Utterance.sequence_num.asc(), Utterance.created_at.asc())
+        )
+        all_turns = [
+            {"speaker_role": u.speaker_role, "raw_text": u.raw_text, "normalised_text": u.normalised_text}
+            for u in u_res.scalars().all()
+        ]
+
+        evaluation = await sarvam_extractor.evaluate_call_and_summarize(
+            case_info=info,
+            goal=case.goal if case else "Dispute resolution",
+            turns=all_turns,
+            confirmed_promises=confirmed_promises,
+        )
+
+        await manager.broadcast(call_id, {
+            "type": "call_ended",
+            "call_id": call_id,
+            "has_conclusion": evaluation["has_conclusion"],
+            "reason": reason or evaluation["outcome_title"],
+            "status": evaluation["status"].lower(),
+            "summary": evaluation["summary"],
+        })
+
+        # Always dispatch post-call summary email with the AI Agent's autonomous determination
+        if case:
+            target_emails = []
+            user_email = (
+                case.user_email
+                or (case.owner_id if "@" in (case.owner_id or "") else None)
+                or (case.approved_info or {}).get("contact_email")
+                or (case.approved_info or {}).get("email")
+            )
+            if user_email and "@" in user_email and not any(d in user_email.lower() for d in ["@mockon.ai", "@example.com", "@test.com", "@mock.com"]):
+                target_emails.append(user_email)
+
+            if settings.smtp_user and settings.smtp_user not in target_emails:
+                target_emails.append(settings.smtp_user)
+
+            ticket_number = info.get("ticket_number") or "TKT-2026-78432"
+            amt_str = f"₹{info.get('disputed_amount', '8,500')}"
+            id_type = info.get("identifier_type") or "Reference"
+            id_val = info.get("identifier_value") or info.get("phone_number") or "CA-1029481029"
+
+            p_list = [
+                {
+                    "type": getattr(p, "commitment_type", "refund"),
+                    "amount": getattr(p, "amount", amt_str),
+                    "deadline_phrase": getattr(p, "raw_date_phrase", "in 5 business days") or "in 5 business days",
+                }
+                for p in confirmed_promises
+            ]
+
+            for recipient in target_emails:
+                asyncio.create_task(email_service.send_call_summary(
+                    to_email=recipient,
+                    case_id=case.id,
+                    call_id=call.id,
+                    provider=provider,
+                    phone_number=info.get("phone_number") or "Registered Mobile",
+                    ticket_number=ticket_number,
+                    amount_str=amt_str,
+                    due_date_str="in 5 business days",
+                    promises=p_list,
+                    identifier_label=id_type,
+                    identifier_val=id_val,
+                    domain=info.get("domain") or "telecom",
+                    outcome_status=evaluation["status"],
+                    outcome_title=evaluation["outcome_title"],
+                    executive_summary=evaluation["summary"],
+                    next_step=evaluation["next_step"],
+                    force=True,
+                ))
+
+        return {
+            "status": "ended",
+            "call_id": call_id,
+            "has_conclusion": evaluation["has_conclusion"],
+            "reason": reason or evaluation["outcome_title"],
+            "evaluation": evaluation,
+        }
+
+
 @router.post("/{call_id}/end")
 async def end_call(
     call_id: str,
@@ -580,118 +726,5 @@ async def end_call(
     db: AsyncSession = Depends(get_db),
 ):
     """Manually end a call, broadcast termination with conclusion state, and dispatch proper summary or inconclusive notification."""
-    result = await db.execute(select(Call).where(Call.id == call_id))
-    call = result.scalar_one_or_none()
-    if not call:
-        raise HTTPException(404, "Call not found")
-
-    manager.cancel_task(call_id)
-    _call_advocate_locks.pop(call_id, None)
-    call.status = "ended"
-    call.ended_at = datetime.now(timezone.utc)
-
-    # Auto-confirm any promises extracted on the call so they are locked into evidence and tracked by deadline worker
-    unconfirmed = await db.execute(
-        select(Promise).where(Promise.case_id == call.case_id, Promise.user_confirmed == False)
-    )
-    for p in unconfirmed.scalars().all():
-        p.user_confirmed = True
-        p.user_confirmation_timestamp = datetime.now(timezone.utc)
-        p.follow_up_allowed = True
-        if not p.due_at:
-            p.due_at = datetime.now(timezone.utc) + timedelta(days=3)
-    await db.commit()
-
-    # Determine whether a genuine commitment or resolution was logged
-    from app.services.ledger import ledger
-    confirmed_promises = await ledger.get_promises_for_case(db, call.case_id)
-
-    c_res = await db.execute(select(Case).where(Case.id == call.case_id))
-    case = c_res.scalar_one_or_none()
-    info = case.approved_info if case else {}
-    provider = info.get("service_provider") or "Customer Care"
-
-    # Pull all call utterances to let our female AI Personal Agent (Shivani) autonomously evaluate the call
-    u_res = await db.execute(
-        select(Utterance)
-        .where(Utterance.call_id == call_id)
-        .order_by(Utterance.sequence_num.asc(), Utterance.created_at.asc())
-    )
-    all_turns = [
-        {"speaker_role": u.speaker_role, "raw_text": u.raw_text, "normalised_text": u.normalised_text}
-        for u in u_res.scalars().all()
-    ]
-
-    evaluation = await sarvam_extractor.evaluate_call_and_summarize(
-        case_info=info,
-        goal=case.goal if case else "Dispute resolution",
-        turns=all_turns,
-        confirmed_promises=confirmed_promises,
-    )
-
-    await manager.broadcast(call_id, {
-        "type": "call_ended",
-        "call_id": call_id,
-        "has_conclusion": evaluation["has_conclusion"],
-        "reason": evaluation["outcome_title"],
-        "status": evaluation["status"].lower(),
-        "summary": evaluation["summary"],
-    })
-
-    # Always dispatch post-call summary email with the AI Agent's autonomous determination
-    if case:
-        target_emails = []
-        user_email = (
-            case.user_email
-            or (case.owner_id if "@" in (case.owner_id or "") else None)
-            or (case.approved_info or {}).get("contact_email")
-            or (case.approved_info or {}).get("email")
-        )
-        if user_email and "@" in user_email and not any(d in user_email.lower() for d in ["@mockon.ai", "@example.com", "@test.com", "@mock.com"]):
-            target_emails.append(user_email)
-
-        if settings.smtp_user and settings.smtp_user not in target_emails:
-            target_emails.append(settings.smtp_user)
-
-        ticket_number = info.get("ticket_number") or "TKT-2026-78432"
-        amt_str = f"₹{info.get('disputed_amount', '8,500')}"
-        id_type = info.get("identifier_type") or "Reference"
-        id_val = info.get("identifier_value") or info.get("phone_number") or "CA-1029481029"
-
-        p_list = [
-            {
-                "type": getattr(p, "commitment_type", "refund"),
-                "amount": getattr(p, "amount", amt_str),
-                "deadline_phrase": getattr(p, "raw_date_phrase", "in 3 days") or "in 3 days",
-            }
-            for p in confirmed_promises
-        ]
-
-        for recipient in target_emails:
-            asyncio.create_task(email_service.send_call_summary(
-                to_email=recipient,
-                case_id=case.id,
-                call_id=call.id,
-                provider=provider,
-                phone_number=info.get("phone_number") or "Registered Mobile",
-                ticket_number=ticket_number,
-                amount_str=amt_str,
-                due_date_str="in 3 business days",
-                promises=p_list,
-                identifier_label=id_type,
-                identifier_val=id_val,
-                domain=info.get("domain") or "telecom",
-                outcome_status=evaluation["status"],
-                outcome_title=evaluation["outcome_title"],
-                executive_summary=evaluation["summary"],
-                next_step=evaluation["next_step"],
-                force=True,
-            ))
-
-    return {
-        "status": "ended",
-        "call_id": call_id,
-        "has_conclusion": evaluation["has_conclusion"],
-        "reason": evaluation["outcome_title"],
-        "evaluation": evaluation,
-    }
+    reason = payload.reason if payload else None
+    return await execute_call_end(call_id, reason=reason)

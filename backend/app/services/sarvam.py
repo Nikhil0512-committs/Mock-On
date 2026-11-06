@@ -200,7 +200,9 @@ class SarvamExtractor:
             has_refund = any(kw in lower_text for kw in [
                 "will refund", "issue a refund", "refund of", "credit will be",
                 "credit kar diya", "credit hoga", "paise wapas", "refund kar denge",
-                "full refund", "refund within", "reversing the charges", "bill waiver"
+                "full refund", "refund within", "reversing the charges", "bill waiver",
+                "refund ho jaega", "refund ho jayega", "refund kar diya", "refund karenge",
+                "refund mil jayega", "refund aa jayega", "processed within", "credit within"
             ])
             has_callback = any(kw in lower_text for kw in ["call you back", "call back in", "senior manager will call", "call karenge", "sampark karenge"])
             has_visit = any(kw in lower_text for kw in ["technician visit", "engineer will visit", "visit your premises", "replace the defective meter", "visit karega", "ghar aayega"])
@@ -333,7 +335,9 @@ class SarvamExtractor:
             "processed within", "reverse kar", "reversal will", "within 2 days", "within 3 days",
             "within 24 hours", "within 48 hours", "within 5 days", "within 7 days",
             "account mein aa jayega", "refund kar diya jayega", "waive off", "waived",
-            "full refund has been approved", "initiated the refund", "reversal has been processed"
+            "full refund has been approved", "initiated the refund", "reversal has been processed",
+            "refund ho jaega", "refund ho jayega", "paise wapas", "refund kar denge",
+            "paise mil jayenge", "amount refund", "refund karenge", "refund mil jayega"
         ]
         is_commitment = any(t in lower for t in commitment_terms)
 

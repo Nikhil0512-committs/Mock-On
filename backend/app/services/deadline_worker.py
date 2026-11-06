@@ -113,6 +113,8 @@ class DeadlineWorker:
                             or ((case.approved_info or {}).get("contact_email") if case else None)
                             or ((case.approved_info or {}).get("email") if case else None)
                         )
+                        if not target_email or "@" not in target_email or any(d in target_email.lower() for d in ["@mockon.ai", "@example.com", "@test.com", "@mock.com"]):
+                            target_email = settings.smtp_user
                         if case and target_email:
                             provider = case.approved_info.get("service_provider", "Customer Support") if case.approved_info else "Customer Support"
                             amt_val = p.amount or (case.approved_info.get("disputed_amount") if case.approved_info else None)

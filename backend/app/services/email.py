@@ -84,21 +84,48 @@ class EmailService:
         return False
 
     async def _send(self, to_email: str, subject: str, html_body: str, text_body: Optional[str] = None) -> bool:
-        """Internal helper to dispatch an HTML email via SMTP."""
-        if not self.is_configured:
-            logger.warning("SMTP is not configured. Email to %s skipped.", to_email)
-            return False
-
+        """Internal helper to dispatch an HTML email via HTTPS relay (Port 443) with SMTP fallback."""
         if not to_email:
             logger.warning("No recipient email specified.")
             return False
 
+        # 1. High-reliability HTTPS Relay via Vercel Port 443 (never blocked by cloud host firewalls like Render Free Tier)
+        relay_urls = [
+            f"{settings.public_frontend_url}/api/send-email",
+            "https://mock-on.vercel.app/api/send-email",
+        ]
+        import httpx
+        for relay_url in relay_urls:
+            try:
+                async with httpx.AsyncClient(timeout=8.0) as client:
+                    resp = await client.post(
+                        relay_url,
+                        json={
+                            "to": to_email,
+                            "subject": subject,
+                            "html": html_body,
+                            "text": text_body,
+                        },
+                    )
+                    if resp.status_code == 200:
+                        logger.info("Email sent successfully via HTTPS Relay (%s) to %s: %s", relay_url, to_email, subject)
+                        return True
+                    else:
+                        logger.debug("HTTPS Relay %s returned status %d: %s", relay_url, resp.status_code, resp.text)
+            except Exception as relay_err:
+                logger.debug("HTTPS Relay %s failed: %s", relay_url, relay_err)
+
+        # 2. Direct SMTP Fallback (for environments where outbound 465/587 is open)
+        if not self.is_configured:
+            logger.warning("Direct SMTP is not configured. Email to %s skipped.", to_email)
+            return False
+
         try:
             await asyncio.to_thread(self._send_sync, to_email, subject, html_body, text_body)
-            logger.info("Email sent successfully to %s: %s", to_email, subject)
+            logger.info("Email sent successfully via direct SMTP to %s: %s", to_email, subject)
             return True
         except Exception as e:
-            logger.error("Failed to send email to %s: %s", to_email, e, exc_info=True)
+            logger.error("Failed to send email to %s via all dispatch methods: %s", to_email, e)
             return False
 
     async def send_call_summary(
