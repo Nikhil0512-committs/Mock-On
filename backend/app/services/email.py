@@ -54,9 +54,10 @@ class EmailService:
         else:
             msg.set_content(html_body, subtype="html")
 
-        # Try Port 465 (Direct SSL) first, then Port 587 (STARTTLS)
-        preferred_port = self.port if self.port in (465, 587) else 465
-        ports = [preferred_port, 587 if preferred_port == 465 else 465]
+        # Always try Port 465 (Direct SSL) first for sub-second delivery, fallback to 587
+        ports = [465, 587] if self.port == 465 else [self.port, 465, 587]
+        # Deduplicate while preserving order
+        ports = list(dict.fromkeys(ports))
 
         last_exc = None
         for current_port in ports:
@@ -110,21 +111,58 @@ class EmailService:
         phone_number: str = "Registered Mobile",
         ticket_number: str = "Pending Docket",
         amount_str: str = "In Review",
-        due_date_str: str = "in 5 business days",
+        due_date_str: str = "in 3 business days",
         promises: list[dict] = None,
         identifier_label: str = "Reference",
         identifier_val: str = None,
         domain: str = "telecom",
         force: bool = False,
+        call_id: Optional[str] = None,
+        outcome_status: str = "RESOLVED_PROMISED",
+        outcome_title: Optional[str] = None,
+        executive_summary: Optional[str] = None,
+        next_step: Optional[str] = None,
     ) -> bool:
         """Send post-call summary with extracted commitments, ticket details, and domain context."""
-        if not force and self._is_duplicate(f"summary:{to_email}:{case_id}:{ticket_number}", cooldown_seconds=600):
+        dedup_key = f"summary:{to_email}:{case_id}:{call_id or ticket_number}"
+        if not force and self._is_duplicate(dedup_key, cooldown_seconds=15):
             return True
-        subject = f"[Mock-On] Case Summary: Dispute with {provider} (Ticket #{ticket_number})"
+
+        title_suffix = outcome_title or f"Dispute with {provider} (Ticket #{ticket_number})"
+        subject = f"[Mock-On Summary] {title_suffix}"
         case_url = f"{settings.public_frontend_url}/ledger/{case_id}"
 
         id_disp = f"{identifier_label} ({identifier_val})" if identifier_val else f"phone number {phone_number}"
         id_detail_val = identifier_val or phone_number
+
+        # Theme styling based on autonomous outcome
+        is_resolved = (outcome_status == "RESOLVED_PROMISED")
+        is_refused = (outcome_status == "REFUSED_ESCALATED")
+
+        if is_resolved:
+            header_gradient = "linear-gradient(135deg, #059669 0%, #0d9488 100%)"
+            badge_text = "Commitment Logged & Monitored"
+            status_text = "Resolution Agreed by Representative"
+            status_color = "#059669"
+        elif is_refused:
+            header_gradient = "linear-gradient(135deg, #e11d48 0%, #be123c 100%)"
+            badge_text = "Statutory Refusal Recorded"
+            status_text = "Refused by Representative — Escalated"
+            status_color = "#e11d48"
+        else:
+            header_gradient = "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)"
+            badge_text = "Call Summary & Follow-Up"
+            status_text = "Call Concluded — Follow-Up Active"
+            status_color = "#4f46e5"
+
+        summary_text = executive_summary or (
+            f"I represented {phone_number} on a live phone call with {provider} customer support regarding {id_disp}. "
+            f"All dialogue turns have been recorded into your immutable evidence ledger."
+        )
+
+        next_action_text = next_step or (
+            "Mock-On AI is tracking the resolution deadline and will automatically escalate if needed."
+        )
 
         promises_html = ""
         if promises:
@@ -139,13 +177,31 @@ class EmailService:
                     <td style="padding: 10px 14px; color: #475569;">{p_due}</td>
                 </tr>
                 """
-        else:
+        elif is_resolved:
             promises_html = f"""
             <tr style="border-bottom: 1px solid #e2e8f0;">
                 <td style="padding: 10px 14px; font-weight: 600; color: #1e293b;">Disputed Charge Refund</td>
                 <td style="padding: 10px 14px; color: #059669; font-weight: 700;">{amount_str}</td>
                 <td style="padding: 10px 14px; color: #475569;">{due_date_str}</td>
             </tr>
+            """
+
+        table_section = ""
+        if promises_html:
+            table_section = f"""
+            <h3 style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; margin: 20px 0 10px 0;">Logged Commitments</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px;">
+              <thead>
+                <tr style="background: #f1f5f9; text-align: left; color: #64748b;">
+                  <th style="padding: 10px 14px;">Action Promised</th>
+                  <th style="padding: 10px 14px;">Amount</th>
+                  <th style="padding: 10px 14px;">Deadline</th>
+                </tr>
+              </thead>
+              <tbody>
+                {promises_html}
+              </tbody>
+            </table>
             """
 
         html_body = f"""
@@ -156,14 +212,16 @@ class EmailService:
           <style>
             body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0f172a; margin: 0; padding: 24px; color: #334155; }}
             .container {{ max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2); }}
-            .header {{ background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); padding: 32px 28px; color: white; }}
+            .header {{ background: {header_gradient}; padding: 32px 28px; color: white; }}
             .badge {{ display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 11px; font-weight: 700; text-transform: uppercase; background: rgba(255,255,255,0.2); letter-spacing: 0.05em; }}
             .title {{ font-size: 22px; font-weight: 800; margin: 12px 0 6px 0; }}
             .subtitle {{ font-size: 13px; opacity: 0.9; margin: 0; }}
             .content {{ padding: 28px; }}
+            .summary-box {{ background: #f8fafc; border-left: 4px solid #4f46e5; border-radius: 8px; padding: 16px 18px; margin-bottom: 20px; font-size: 14px; color: #1e293b; line-height: 1.6; }}
             .card {{ background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; margin-bottom: 20px; }}
-            .card-title {{ font-size: 12px; text-transform: uppercase; font-weight: 700; color: #64748b; margin-bottom: 8px; letter-spacing: 0.05em; }}
-            .card-val {{ font-size: 15px; font-weight: 600; color: #0f172a; }}
+            .card-title {{ font-size: 11px; text-transform: uppercase; font-weight: 700; color: #64748b; margin-bottom: 6px; letter-spacing: 0.05em; }}
+            .card-val {{ font-size: 14px; font-weight: 600; color: #0f172a; }}
+            .action-box {{ background: #eef2ff; border: 1px solid #c7d2fe; padding: 14px 16px; border-radius: 8px; margin-bottom: 24px; font-size: 13px; color: #3730a3; line-height: 1.5; }}
             .btn {{ display: inline-block; background: #4f46e5; color: #ffffff !important; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; }}
             .footer {{ padding: 20px 28px; background: #f1f5f9; font-size: 12px; color: #64748b; text-align: center; border-top: 1px solid #e2e8f0; }}
           </style>
@@ -171,15 +229,18 @@ class EmailService:
         <body>
           <div class="container">
             <div class="header">
-              <span class="badge">Helpline Call Completed</span>
-              <h1 class="title">Mock-On AI Advocate Report</h1>
-              <p class="subtitle">Dispute call with {provider} has completed and commitments were logged.</p>
+              <span class="badge">{badge_text}</span>
+              <h1 class="title">Mock-On AI Post-Call Summary</h1>
+              <p class="subtitle">Direct Report from your AI Personal Assistant (Shivani)</p>
             </div>
             
             <div class="content">
-              <p style="font-size: 15px; line-height: 1.5; color: #1e293b; margin-top: 0;">
-                Hello, our AI agent contacted <strong>{provider} Helpline</strong> on your behalf regarding <strong>{id_disp}</strong>.
-              </p>
+              <div class="summary-box">
+                <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: #4f46e5; margin-bottom: 6px; letter-spacing: 0.05em;">
+                  Executive Summary &bull; Personal AI Advocate (Shivani)
+                </div>
+                {summary_text}
+              </div>
 
               <div class="card">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
@@ -198,42 +259,31 @@ class EmailService:
                     <div class="card-val" style="font-family: monospace;">{id_detail_val}</div>
                   </div>
                   <div>
-                    <div class="card-title">Status</div>
-                    <div class="card-val" style="color: #059669;">Promise Recorded & Monitored</div>
+                    <div class="card-title">Autonomous Status</div>
+                    <div class="card-val" style="color: {status_color};">{status_text}</div>
                   </div>
                 </div>
               </div>
 
-              <h3 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; margin: 20px 0 10px 0;">Logged Commitments</h3>
-              <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 13px;">
-                <thead>
-                  <tr style="background: #f1f5f9; text-align: left; color: #64748b;">
-                    <th style="padding: 10px 14px;">Action Promised</th>
-                    <th style="padding: 10px 14px;">Amount</th>
-                    <th style="padding: 10px 14px;">Deadline</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {promises_html}
-                </tbody>
-              </table>
+              {table_section}
 
-              <div style="background: #eef2ff; border-left: 4px solid #4f46e5; padding: 14px 16px; border-radius: 4px; margin-bottom: 24px; font-size: 13px; color: #3730a3; line-height: 1.5;">
-                <strong>What happens next:</strong> Mock-On AI is tracking the 5-day deadline automatically. If your refund is not credited within this period, our agent will notify you and initiate a re-contact or formal TRAI escalation.
+              <div class="action-box">
+                <strong>Next Steps:</strong> {next_action_text}
               </div>
 
               <div style="text-align: center; margin: 24px 0 12px 0;">
-                <a href="{case_url}" class="btn">View Live Case & Evidence Pack</a>
+                <a href="{case_url}" class="btn">View Immutable Evidence Pack</a>
               </div>
             </div>
 
             <div class="footer">
-              Mock-On — Voice-First AI Consumer Advocate &bull; Powered by Gnani AI & Sarvam AI
+              Mock-On &bull; Voice-First AI Consumer Advocate &bull; Powered by Gnani AI & Sarvam AI
             </div>
           </div>
         </body>
         </html>
         """
+        return await self._send(to_email, subject, html_body)
         return await self._send(to_email, subject, html_body)
 
     async def send_deadline_checkin(

@@ -137,10 +137,6 @@ export default function SwitchboardPage() {
   const [refusalDetected, setRefusalDetected] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [autoSendVoice, setAutoSendVoice] = useState(true);
-  const [endCallModalOpen, setEndCallModalOpen] = useState(false);
-  const [endReason, setEndReason] = useState(
-    "Representative disconnected midway before settlement could be confirmed"
-  );
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isAdvocateSpeaking, setIsAdvocateSpeaking] = useState(false);
   const silenceTimerRef = useRef<any>(null);
@@ -534,15 +530,10 @@ export default function SwitchboardPage() {
     }
   };
 
-  const handleEndCall = async (selectedReason?: string) => {
+  const handleEndCall = async () => {
     if (!activeCallItem) return;
-    const finalReason =
-      selectedReason ||
-      endReason ||
-      "Representative terminated live session midway before reaching resolution.";
     try {
-      await callsApi.end(activeCallItem.call.id, { reason: finalReason });
-      setEndCallModalOpen(false);
+      await callsApi.end(activeCallItem.call.id);
       setActiveCallItem(null);
       fetchPending();
     } catch (err) {
@@ -744,13 +735,7 @@ export default function SwitchboardPage() {
                 </div>
 
                 <button
-                  onClick={() => {
-                    if (lastPromise) {
-                      handleEndCall("Call concluded with verified commitment on ledger.");
-                    } else {
-                      setEndCallModalOpen(true);
-                    }
-                  }}
+                  onClick={handleEndCall}
                   className="px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold flex items-center gap-1.5 transition-all"
                 >
                   <PhoneOff className="w-3.5 h-3.5" />
@@ -813,7 +798,7 @@ export default function SwitchboardPage() {
                                 : "bg-brand-500/20 text-brand-300 border border-brand-500/30"
                             }`}
                           >
-                            {isOperator ? "YOU (COMPANY REPRESENTATIVE)" : "MOCK-ON AI ADVOCATE"}
+                            {isOperator ? "YOU (COMPANY REPRESENTATIVE)" : "MOCK-ON AI ADVOCATE (SHIVANI)"}
                           </span>
                         </div>
                         <div
@@ -1058,82 +1043,6 @@ export default function SwitchboardPage() {
         </div>
       </div>
 
-      {/* End Call Inconclusive Reason Modal */}
-      {endCallModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-          <div className="w-full max-w-md bg-[#0d1527] border border-white/[0.12] rounded-3xl p-6 space-y-4 shadow-2xl relative">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
-                <PhoneOff className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">End Call Midway</h3>
-                <p className="text-xs text-white/50">
-                  No resolution promise recorded. Specify reason to update the user:
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-[11px] font-bold uppercase tracking-wider text-white/60">
-                Quick Reason Selection:
-              </label>
-              <div className="space-y-1.5">
-                {[
-                  "Representative disconnected midway before settlement could be confirmed",
-                  "Call ended early without reaching an agreement",
-                  "Line dropped / communication timeout during conversation",
-                  "Dispute resolution denied under company billing guidelines",
-                  "Shift ended / Operator unable to resolve at this desk",
-                ].map((r, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setEndReason(r)}
-                    className={`w-full text-left p-2.5 rounded-xl text-xs transition-all border ${
-                      endReason === r
-                        ? "bg-rose-500/20 border-rose-500/50 text-white font-medium"
-                        : "bg-white/[0.03] border-white/[0.06] text-white/70 hover:bg-white/[0.06]"
-                    }`}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="text-[11px] font-bold uppercase tracking-wider text-white/60 block mb-1">
-                Custom Reason Note:
-              </label>
-              <input
-                type="text"
-                value={endReason}
-                onChange={(e) => setEndReason(e.target.value)}
-                className="input w-full py-2 px-3 text-xs bg-black/40 border-white/[0.1] rounded-xl text-white"
-                placeholder="Describe reason for midway disconnect..."
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setEndCallModalOpen(false)}
-                className="btn-ghost text-xs py-2 px-3.5 rounded-xl text-white/60 hover:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => handleEndCall()}
-                className="btn-primary text-xs py-2 px-4 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold shadow-lg shadow-rose-600/30"
-              >
-                Confirm End Call &amp; Update User
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

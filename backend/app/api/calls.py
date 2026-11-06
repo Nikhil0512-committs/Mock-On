@@ -539,29 +539,40 @@ async def end_call(
     # Determine whether a genuine commitment or resolution was logged
     from app.services.ledger import ledger
     confirmed_promises = await ledger.get_promises_for_case(db, call.case_id)
-    has_conclusion = len(confirmed_promises) > 0
 
     c_res = await db.execute(select(Case).where(Case.id == call.case_id))
     case = c_res.scalar_one_or_none()
     info = case.approved_info if case else {}
     provider = info.get("service_provider") or "Customer Care"
 
-    user_reason = payload.reason.strip() if payload and payload.reason and payload.reason.strip() else None
+    # Pull all call utterances to let our female AI Personal Agent (Shivani) autonomously evaluate the call
+    u_res = await db.execute(
+        select(Utterance)
+        .where(Utterance.call_id == call_id)
+        .order_by(Utterance.sequence_num.asc(), Utterance.created_at.asc())
+    )
+    all_turns = [
+        {"speaker_role": u.speaker_role, "raw_text": u.raw_text, "normalised_text": u.normalised_text}
+        for u in u_res.scalars().all()
+    ]
 
-    if not has_conclusion:
-        end_reason = user_reason or "Call disconnected midway before the representative confirmed a resolution or commitment."
-    else:
-        end_reason = user_reason or f"Call successfully concluded with confirmed resolution from {provider}."
+    evaluation = await sarvam_extractor.evaluate_call_and_summarize(
+        case_info=info,
+        goal=case.goal if case else "Dispute resolution",
+        turns=all_turns,
+        confirmed_promises=confirmed_promises,
+    )
 
     await manager.broadcast(call_id, {
         "type": "call_ended",
         "call_id": call_id,
-        "has_conclusion": has_conclusion,
-        "reason": end_reason,
-        "status": "inconclusive" if not has_conclusion else "resolved",
+        "has_conclusion": evaluation["has_conclusion"],
+        "reason": evaluation["outcome_title"],
+        "status": evaluation["status"].lower(),
+        "summary": evaluation["summary"],
     })
 
-    # Dispatch appropriate notification email to user
+    # Always dispatch post-call summary email with the AI Agent's autonomous determination
     if case:
         user_email = (
             case.user_email
@@ -569,50 +580,48 @@ async def end_call(
             or (case.approved_info or {}).get("contact_email")
             or (case.approved_info or {}).get("email")
         )
+        if not user_email or "@" not in user_email:
+            user_email = settings.smtp_user
+
         if user_email:
             ticket_number = info.get("ticket_number") or "TKT-2026-78432"
             amt_str = f"₹{info.get('disputed_amount', '8,500')}"
             id_type = info.get("identifier_type") or "Reference"
             id_val = info.get("identifier_value") or info.get("phone_number") or "CA-1029481029"
 
-            if not has_conclusion:
-                # Update user properly that call had no conclusion due to specific reason!
-                asyncio.create_task(email_service.send_inconclusive_call_notice(
-                    to_email=user_email,
-                    case_id=case.id,
-                    provider=provider,
-                    ticket_number=ticket_number,
-                    amount_str=amt_str,
-                    reason=end_reason,
-                    identifier_label=id_type,
-                    identifier_val=id_val,
-                ))
-            else:
-                p_list = [
-                    {
-                        "type": p.commitment_type,
-                        "amount": p.amount,
-                        "deadline_phrase": p.raw_date_phrase or "in 3 days",
-                    }
-                    for p in confirmed_promises
-                ]
-                asyncio.create_task(email_service.send_call_summary(
-                    to_email=user_email,
-                    case_id=case.id,
-                    provider=provider,
-                    phone_number=info.get("phone_number") or "Registered Mobile",
-                    ticket_number=ticket_number,
-                    amount_str=amt_str,
-                    due_date_str="in 3 business days",
-                    promises=p_list,
-                    identifier_label=id_type,
-                    identifier_val=id_val,
-                    domain=info.get("domain") or "utilities",
-                ))
+            p_list = [
+                {
+                    "type": getattr(p, "commitment_type", "refund"),
+                    "amount": getattr(p, "amount", amt_str),
+                    "deadline_phrase": getattr(p, "raw_date_phrase", "in 3 days") or "in 3 days",
+                }
+                for p in confirmed_promises
+            ]
+
+            asyncio.create_task(email_service.send_call_summary(
+                to_email=user_email,
+                case_id=case.id,
+                call_id=call.id,
+                provider=provider,
+                phone_number=info.get("phone_number") or "Registered Mobile",
+                ticket_number=ticket_number,
+                amount_str=amt_str,
+                due_date_str="in 3 business days",
+                promises=p_list,
+                identifier_label=id_type,
+                identifier_val=id_val,
+                domain=info.get("domain") or "telecom",
+                outcome_status=evaluation["status"],
+                outcome_title=evaluation["outcome_title"],
+                executive_summary=evaluation["summary"],
+                next_step=evaluation["next_step"],
+                force=True,
+            ))
 
     return {
         "status": "ended",
         "call_id": call_id,
-        "has_conclusion": has_conclusion,
-        "reason": end_reason,
+        "has_conclusion": evaluation["has_conclusion"],
+        "reason": evaluation["outcome_title"],
+        "evaluation": evaluation,
     }
