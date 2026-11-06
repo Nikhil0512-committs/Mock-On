@@ -403,11 +403,18 @@ async def send_call_message(
                                 "normalised_text": u.normalised_text,
                             })
 
-                    # Strict conversational guard: If the latest turn in DB is ALREADY an advocate reply ('user'),
-                    # the representative has not spoken since. Never produce duplicate stacked advocate turns!
+                    # Freeze guard: skip ONLY if the advocate replied within the last 3 seconds.
+                    # A wider window would block legitimate new operator turns after Shivani responds.
                     if all_turns and all_turns[-1].speaker_role == "user":
-                        logger.info(f"Advocate was already the last speaker on call {call_id}; skipping duplicate advocate reply.")
-                        return
+                        last_adv_time = all_turns[-1].created_at
+                        if last_adv_time:
+                            adv_age_s = (datetime.now(timezone.utc) - last_adv_time).total_seconds()
+                            if adv_age_s < 3.0:
+                                logger.info(
+                                    f"Advocate replied {adv_age_s:.1f}s ago on call {call_id}; "
+                                    "skipping rapid-duplicate advocate reply."
+                                )
+                                return
 
                     # Generate intelligent context-aware reply using Sarvam LLM + Intake docket
                     adv_result = await sarvam_extractor.generate_advocate_response(
@@ -461,16 +468,9 @@ async def send_call_message(
                         async_db.add(adv_utt)
                         await async_db.commit()
 
-                    # Synthesize advocate speech audio via Gnani Timbre TTS
-                    adv_audio = None
-                    try:
-                        from app.services.gnani_tts import tts_adapter
-                        import base64
-                        adv_bytes = await tts_adapter.synthesise(advocate_text)
-                        adv_audio = base64.b64encode(adv_bytes).decode("utf-8")
-                    except Exception as e:
-                        logger.debug(f"Advocate TTS synthesis failed: {e}")
-
+                    # ── TEXT-FIRST FAST PATH ──────────────────────────────────────────
+                    # Broadcast the text reply immediately (< 200ms) so the UI shows
+                    # Shivani's response without waiting for TTS synthesis.
                     await manager.broadcast(call_id, {
                         "type": "utterance",
                         "data": {
@@ -480,9 +480,25 @@ async def send_call_message(
                             "thought_process": thought_process,
                             "is_final": True,
                             "latencyMs": 110,
-                            "audio_b64": adv_audio,
+                            "audio_b64": None,  # Audio follows via audio_patch
                         },
                     })
+
+                    # ── BACKGROUND TTS ────────────────────────────────────────────────
+                    # Synthesize audio and send as a secondary audio_patch event.
+                    # The UI plays it via the SequentialAudioQueue when it arrives.
+                    try:
+                        from app.services.gnani_tts import tts_adapter
+                        import base64
+                        adv_bytes = await tts_adapter.synthesise(advocate_text)
+                        adv_audio = base64.b64encode(adv_bytes).decode("utf-8")
+                        await manager.broadcast(call_id, {
+                            "type": "audio_patch",
+                            "utterance_id": adv_id,
+                            "audio_b64": adv_audio,
+                        })
+                    except Exception as e:
+                        logger.debug(f"Advocate TTS synthesis failed (text already delivered): {e}")
 
             asyncio.create_task(advocate_reply())
 

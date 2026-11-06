@@ -239,6 +239,10 @@ export default function SwitchboardPage() {
             setIsSpeaking(false);
             const toSend = clean.trim();
             if (toSend.length >= 2) {
+              // Clear buffer immediately so the subsequent recognition restart
+              // cannot replay the same words into the new session.
+              accumulatedTurnTextRef.current = "";
+              setMessageInput("");
               handleSendMessage(toSend);
             }
           }, 1200);
@@ -266,11 +270,19 @@ export default function SwitchboardPage() {
 
       recognition.onend = () => {
         setIsSpeaking(false);
+        // On natural end (browser auto-closes after silence), restart with a longer
+        // delay (400ms) so Chrome's internal buffer fully flushes before the new
+        // session begins — this prevents the new session from re-firing stale results.
         if (isListeningRef.current && !switchboardAudioQueue.isPlaying) {
           if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
           restartTimeoutRef.current = setTimeout(() => {
-            if (isListeningRef.current && !switchboardAudioQueue.isPlaying) startRecognition();
-          }, 100);
+            if (isListeningRef.current && !switchboardAudioQueue.isPlaying) {
+              // Always clear the accumulated buffer before restarting so previous
+              // utterances don't bleed into the next recognition session.
+              accumulatedTurnTextRef.current = "";
+              startRecognition();
+            }
+          }, 400);
         }
       };
 
@@ -396,6 +408,7 @@ export default function SwitchboardPage() {
           });
 
           // Audio voice output: play Advocate AI speech out loud for the representative!
+          // Note: If audio_b64 is null/absent (text-first fast path), audio arrives via audio_patch event.
           if (speaker === "user" && text) {
             if (raw.audio_b64) {
               switchboardAudioQueue.enqueue(raw.audio_b64 as string);
@@ -429,6 +442,11 @@ export default function SwitchboardPage() {
                 window.speechSynthesis.speak(utter);
               } catch {}
             }
+          }
+        } else if (msg.type === "audio_patch") {
+          // Fast-path: text was already delivered; now play the TTS audio for the advocate turn.
+          if (msg.audio_b64) {
+            switchboardAudioQueue.enqueue(msg.audio_b64 as string);
           }
         } else if (msg.type === "promise_proposed") {
           const prop = msg.proposal?.promise_data || msg.proposal;
