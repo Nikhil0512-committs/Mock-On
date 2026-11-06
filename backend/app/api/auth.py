@@ -7,6 +7,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
 from app.models.user import User
 from app.models.case import Case
@@ -18,6 +19,19 @@ from app.services.auth import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _set_auth_cookie(response: Response, token: str) -> None:
+    """Set secure authentication cookie with cross-site support for production."""
+    is_prod = settings.app_env != "development"
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        samesite="none" if is_prod else "lax",
+        secure=is_prod,
+        max_age=604800,
+    )
 
 
 class RegisterRequest(BaseModel):
@@ -74,13 +88,7 @@ async def register(
     await db.refresh(user)
 
     token = create_access_token({"sub": user.id, "email": user.email})
-    response.set_cookie(
-        key="access_token",
-        value=token,
-        httponly=True,
-        samesite="lax",
-        max_age=604800,
-    )
+    _set_auth_cookie(response, token)
 
     return AuthResponse(
         access_token=token,
@@ -112,13 +120,7 @@ async def login(
         )
 
     token = create_access_token({"sub": user.id, "email": user.email})
-    response.set_cookie(
-        key="access_token",
-        value=token,
-        httponly=True,
-        samesite="lax",
-        max_age=604800,
-    )
+    _set_auth_cookie(response, token)
 
     # Count user's cases
     case_count = (

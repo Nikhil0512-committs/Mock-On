@@ -3,12 +3,28 @@
  */
 import axios from "axios";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+function getApiBase(): string {
+  let url = (import.meta.env.VITE_API_URL || "").trim();
+  if (!url) {
+    return "http://localhost:8000";
+  }
+  // If user passed domain without scheme (e.g. "mock-on-backend.onrender.com"), prepend https://
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    url = `https://${url}`;
+  }
+  // If user passed http:// for a remote domain, auto-upgrade to https://
+  if (url.startsWith("http://") && !url.includes("localhost") && !url.includes("127.0.0.1")) {
+    url = url.replace("http://", "https://");
+  }
+  return url.replace(/\/+$/, "");
+}
+
+export const API_BASE = getApiBase();
 
 export const api = axios.create({
   baseURL: API_BASE,
   headers: { "Content-Type": "application/json" },
-  timeout: 30_000,
+  timeout: 90_000, // 90s to comfortably tolerate Render free-tier cold starts
 });
 
 // Attach JWT token from localStorage if available
@@ -19,6 +35,33 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// Automatic retry for transient Render cold-start connection resets
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const config = error.config;
+    if (!config || config.__retryCount) {
+      return Promise.reject(error);
+    }
+
+    const isNetworkOrReset =
+      !error.response ||
+      error.code === "ECONNABORTED" ||
+      error.code === "ERR_NETWORK" ||
+      error.message?.includes("Network Error") ||
+      error.message?.includes("timeout");
+
+    // Only retry GET or auth login/register if server was asleep
+    if (isNetworkOrReset && (!config.method || config.method.toLowerCase() === "get" || config.url?.includes("/auth/"))) {
+      config.__retryCount = 1;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      return api(config);
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 export const WS_BASE = API_BASE.replace(/^http/, "ws");
 

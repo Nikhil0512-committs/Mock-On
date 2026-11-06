@@ -18,6 +18,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [phone, setPhone] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isWakingUp, setIsWakingUp] = useState(false);
 
   if (!isOpen) return null;
 
@@ -25,6 +26,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     e.preventDefault();
     setError(null);
     setLoading(true);
+    const wakeTimer = setTimeout(() => setIsWakingUp(true), 2500);
 
     try {
       if (mode === "login") {
@@ -45,9 +47,20 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         onClose();
       }
     } catch (err: any) {
-      const msg = err.response?.data?.detail || "Authentication failed. Please verify your details.";
+      let msg = err.response?.data?.detail;
+      if (!msg) {
+        if (err.code === "ECONNABORTED" || err.message?.includes("timeout")) {
+          msg = "Backend server is waking up from sleep (Render free tier). Please wait 10 seconds and retry.";
+        } else if (err.message?.includes("Network Error") || err.code === "ERR_NETWORK") {
+          msg = "Connection was reset while waking up cloud backend. Please retry in a few seconds.";
+        } else {
+          msg = err.message || "Authentication failed. Please verify your details.";
+        }
+      }
       setError(msg);
     } finally {
+      clearTimeout(wakeTimer);
+      setIsWakingUp(false);
       setLoading(false);
     }
   };
@@ -55,15 +68,27 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const handleQuickLogin = async (quickEmail: string, quickPass: string) => {
     setError(null);
     setLoading(true);
+    const wakeTimer = setTimeout(() => setIsWakingUp(true), 2500);
     try {
       const res = await authApi.login({ email: quickEmail, password: quickPass });
       localStorage.setItem("mock_on_token", res.access_token);
       setCurrentUser(res.user);
       onClose();
     } catch (err: any) {
-      const msg = err.response?.data?.detail || "Quick login failed.";
+      let msg = err.response?.data?.detail;
+      if (!msg) {
+        if (err.code === "ECONNABORTED" || err.message?.includes("timeout")) {
+          msg = "Backend server is waking up from sleep. Please wait 10 seconds and retry.";
+        } else if (err.message?.includes("Network Error") || err.code === "ERR_NETWORK") {
+          msg = "Connection was reset while waking up cloud backend. Please retry in a few seconds.";
+        } else {
+          msg = err.message || "Quick login failed.";
+        }
+      }
       setError(msg);
     } finally {
+      clearTimeout(wakeTimer);
+      setIsWakingUp(false);
       setLoading(false);
     }
   };
@@ -170,6 +195,13 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             Create Account
           </button>
         </div>
+
+        {isWakingUp && !error && (
+          <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2 animate-pulse">
+            <Loader2 className="w-4 h-4 animate-spin flex-shrink-0 text-amber-400" />
+            <span>Connecting to cloud backend... Free-tier instances take ~30-50s to spin up if idle.</span>
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">

@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8000
-    app_cors_origins: str = "http://localhost:5173,http://localhost:3000"
+    app_cors_origins: str = "http://localhost:5173,http://localhost:3000,http://localhost:4173,https://mock-on.vercel.app"
 
     # Database (Neon PostgreSQL with SQLite fallback for offline development)
     database_url: str = Field(
