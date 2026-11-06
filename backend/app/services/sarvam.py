@@ -438,8 +438,20 @@ class SarvamExtractor:
             history_lines.append(f"{speaker}: {t.get('raw_text') or t.get('normalised_text')}")
         transcript_str = "\n".join(history_lines) if history_lines else "Call just started."
 
+        # Check if the AI advocate has already introduced itself in this conversation
+        has_introduced = any(
+            (
+                "personal assistant" in (t.get("raw_text") or "").lower()
+                or "ai personal assistant" in (t.get("raw_text") or "").lower()
+                or "dispute ke regarding" in (t.get("raw_text") or "").lower()
+                or "calling regarding" in (t.get("raw_text") or "").lower()
+                or "follow-up ke regarding" in (t.get("raw_text") or "").lower()
+            )
+            for t in recent_turns
+            if t.get("speaker_role") == "user"
+        )
         user_turn_count = len([t for t in recent_turns if t.get("speaker_role") == "user"])
-        is_opening = (user_turn_count == 0)
+        is_opening = (user_turn_count == 0) and not has_introduced
 
         # Track the immediately preceding advocate text to eliminate consecutive repetitive blabbering
         last_advocate_text = ""
@@ -455,6 +467,21 @@ class SarvamExtractor:
             "dikkat", "pareshani", "kya", "shubh"
         ])
 
+        if has_introduced:
+            turn_instruction = (
+                f"1. SUBSEQUENT TURNS (DO NOT INTRODUCE YOURSELF AGAIN):\n"
+                f"   - You have ALREADY introduced yourself earlier in the call. NEVER re-introduce yourself or say 'Hello, I am ... personal assistant' again!\n"
+                f"   - If the representative greets you or asks how to help, directly state: 'Thank you. I am calling regarding {consumer_name}'s {provider} dispute for Rs {amt}. Could you please check account {id_val}?'\n"
+                f"   - Answer ONLY the specific question asked by the representative. Keep replies to 1 or 2 spoken sentences maximum.\n"
+            )
+        else:
+            turn_instruction = (
+                f"1. OPENING TURN (INTRODUCE YOURSELF & STATE REASON FOR CALL):\n"
+                f"   - When the representative welcomes or greets you, introduce yourself naturally: 'Hello, I am {consumer_name}'s personal assistant. I am calling regarding help with his {provider} bill dispute.'\n"
+                f"   - If they speak in Hindi or ask for language preference: 'Namaste, main {consumer_name} ka personal assistant bol raha hoon. Yeh call unke {provider} bill dispute ke regarding hai. Hum Hindi ya English kisi mein bhi baat kar sakte hain.'\n"
+                f"   - CRITICAL: In this opening turn, DO NOT blabber account numbers, meter numbers, or specific numbers unless they specifically asked for them!\n"
+            )
+
         system_instruction = (
             f"You are the AI Personal Assistant representing consumer {consumer_name} on a live 2-way phone call with {provider} customer support.\n\n"
             f"CONSUMER DOCKET & GRIEVANCE BRIEFING:\n"
@@ -466,10 +493,7 @@ class SarvamExtractor:
             f"- Registered Phone: {phone}\n"
             f"- Grievance Briefing from Consumer: {goal}\n\n"
             f"STRICT CONVERSATIONAL INSTRUCTIONS (NATURAL 2-WAY PHONE CALL):\n"
-            f"1. OPENING TURN (INTRODUCE YOURSELF & STATE REASON FOR CALL):\n"
-            f"   - When the representative welcomes or greets you, introduce yourself naturally: 'Hello, I am {consumer_name}'s personal assistant. I am calling regarding help with his {provider} bill dispute.'\n"
-            f"   - If they speak in Hindi or ask for language preference: 'Namaste, main {consumer_name} ka personal assistant bol raha hoon. Yeh call unke {provider} bill dispute ke regarding hai. Hum Hindi ya English kisi mein bhi baat kar sakte hain.'\n"
-            f"   - CRITICAL: In this opening turn, DO NOT blabber account numbers, meter numbers, or specific numbers unless they specifically asked for them!\n\n"
+            f"{turn_instruction}\n"
             f"2. SUBSEQUENT TURNS (ANSWER SPECIFIC QUESTIONS ONLY — NO INFO-DUMPING):\n"
             f"   - Answer ONLY the specific question asked by the representative. Do NOT recite the entire case briefing unsolicited.\n"
             f"   - If asked for CA / Account number: Give ONLY the account number: '{id_val}'.\n"
@@ -653,6 +677,28 @@ class SarvamExtractor:
                 )
             return spoken, thought
 
+        # 3.0 Representative Greeting or Assistance Offer AFTER introduction was already delivered
+        is_rep_greeting = bool(re.search(
+            r"\b(how\s*(?:may|can)\s*i\s*(?:help|assist)|welcome\s*to|swagat|sahayata|madad|kya\s*(?:madad|sahayata)|how\s*to\s*help|hello\b|namaste\b|good\s*(?:morning|afternoon|evening)|hi\b|boliye\b|tell\s*me\b)",
+            lower_rep
+        ))
+        if is_rep_greeting and has_introduced:
+            thought = (
+                f"Statutory Strategy: Representative opened floor / offered assistance. Stating grievance facts "
+                f"and requesting account check for {id_type} '{id_val}' without repeating introduction."
+            )
+            if is_hindi:
+                spoken = (
+                    f"Ji, main {consumer_name} ke {provider} {dispute_nature} ke regarding baat kar raha hoon. "
+                    f"Disputed amount Rs {amt} hai. Kripya account number {id_val} check karein."
+                )
+            else:
+                spoken = (
+                    f"Thank you. I am calling regarding {consumer_name}'s {provider} {dispute_nature} for Rs {amt}. "
+                    f"Could you please pull up account {id_val} so we can review this?"
+                )
+            return spoken, thought
+
         # 3.1 Statutory Counter-Negotiator: Coupon / Store credit diversion refusal
         evasion_analysis = self.analyze_evasion_and_tactics(rep_latest_text, domain=case_info.get("domain", "telecom"))
         tactic = evasion_analysis["tactic"]
@@ -795,6 +841,18 @@ class SarvamExtractor:
                 content = (msg.get("content") or "").strip()
                 clean_content = content.replace('"', '').replace('*', '').strip()
                 if clean_content and len(clean_content) > 10:
+                    # Guard: If LLM re-introduced itself despite prior intro, replace with factual pivot
+                    if has_introduced and any(p in clean_content.lower() for p in ["personal assistant", "ai personal assistant", "hum hindi ya english", "speak in english"]):
+                        if is_hindi:
+                            clean_content = f"Main {consumer_name} ke Rs {amt} dispute ke regarding call kar raha hoon. Kripya account {id_val} check karein."
+                        else:
+                            clean_content = f"I am calling regarding {consumer_name}'s dispute for Rs {amt}. Could you please check account {id_val}?"
+                    # Anti-verbatim repetition guard
+                    if last_advocate_text and clean_content.strip().lower() == last_advocate_text.strip().lower():
+                        if is_hindi:
+                            clean_content = f"Ji representative ji, kripya account {id_val} par Rs {amt} ke reversal ka status batayein."
+                        else:
+                            clean_content = f"Could you please check account {id_val} and update us on the reversal status for Rs {amt}?"
                     return clean_content, thought
         except Exception as e:
             logger.debug(f"Sarvam LLM fallback: {e}")
@@ -803,6 +861,13 @@ class SarvamExtractor:
             spoken = f"Kripya account {id_val} ke Rs {amt} dispute par resolution timeline batayein."
         else:
             spoken = f"Could you please advise on the concrete resolution timeline for the Rs {amt} dispute under account {id_val}?"
+
+        if last_advocate_text and spoken.strip().lower() == last_advocate_text.strip().lower():
+            if is_hindi:
+                spoken = f"Ji, account {id_val} check karein aur dispute clear karne ki timeline confirm karein."
+            else:
+                spoken = f"Please verify account {id_val} and confirm the turnaround timeline for the refund."
+
         return spoken, thought
 
     async def enhance_grievance(

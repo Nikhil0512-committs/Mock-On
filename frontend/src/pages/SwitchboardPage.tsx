@@ -101,10 +101,13 @@ export default function SwitchboardPage() {
   const [endReason, setEndReason] = useState(
     "Representative disconnected midway before settlement could be confirmed"
   );
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const silenceTimerRef = useRef<any>(null);
+  const restartTimeoutRef = useRef<any>(null);
   const recognitionRef = useRef<any>(null);
   const isListeningRef = useRef(false);
   const lastSentTextRef = useRef<string>("");
+  const lastSentTimeRef = useRef<number>(0);
   const wsRef = useRef<WebSocket | null>(null);
   const transcriptBottomRef = useRef<HTMLDivElement>(null);
 
@@ -115,52 +118,75 @@ export default function SwitchboardPage() {
 
     try {
       const recognition = new SpeechRecognition();
-      recognition.continuous = false;
+      recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = "en-IN";
 
       recognition.onresult = (event: any) => {
-        let currentUtterance = "";
-        let isFinal = false;
+        let finalChunk = "";
+        let interimChunk = "";
 
         for (let i = 0; i < event.results.length; ++i) {
-          currentUtterance += event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            isFinal = true;
+          const res = event.results[i];
+          if (res.isFinal) {
+            finalChunk += res[0].transcript + " ";
+          } else {
+            interimChunk += res[0].transcript;
           }
         }
 
-        setMessageInput(currentUtterance);
+        const fullCandidate = (finalChunk + interimChunk).trim();
+        if (fullCandidate) {
+          setMessageInput(fullCandidate);
+          setIsSpeaking(true);
+        }
 
-        // When utterance is final or pauses for 1000ms, auto-send
-        if (autoSendVoice && currentUtterance.trim()) {
+        // Production-level continuous speech debounce:
+        // When speaker pauses for 1100ms, auto-dispatch the turn and cleanly flush the session
+        if (autoSendVoice && fullCandidate.length >= 2) {
           if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-          
-          const delay = isFinal ? 350 : 1200;
           silenceTimerRef.current = setTimeout(() => {
-            const candidate = currentUtterance.trim();
-            if (candidate && candidate.toLowerCase() !== lastSentTextRef.current.toLowerCase()) {
-              lastSentTextRef.current = candidate;
-              handleSendMessage(candidate);
+            setIsSpeaking(false);
+            const candidate = fullCandidate.trim();
+            if (candidate.length >= 2) {
               setMessageInput("");
+              handleSendMessage(candidate);
+              // Cleanly restart the recognition session to flush results buffer
+              try {
+                recognition.abort();
+              } catch (_) {}
             }
-          }, delay);
+          }, 1100);
         }
       };
 
-      recognition.onerror = () => {
+      recognition.onerror = (event: any) => {
+        // Non-fatal continuous events: ignore 'no-speech' and intentional 'aborted'
+        if (event.error === "no-speech" || event.error === "aborted") {
+          return;
+        }
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+          setIsListening(false);
+          isListeningRef.current = false;
+          setIsSpeaking(false);
+          alert("Microphone permission was denied. Please allow microphone access in your browser settings.");
+          return;
+        }
         if (isListeningRef.current) {
-          setTimeout(() => {
+          if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
+          restartTimeoutRef.current = setTimeout(() => {
             if (isListeningRef.current) startRecognition();
-          }, 300);
+          }, 250);
         }
       };
 
       recognition.onend = () => {
+        setIsSpeaking(false);
         if (isListeningRef.current) {
-          setTimeout(() => {
+          if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
+          restartTimeoutRef.current = setTimeout(() => {
             if (isListeningRef.current) startRecognition();
-          }, 200);
+          }, 80);
         }
       };
 
@@ -169,6 +195,7 @@ export default function SwitchboardPage() {
     } catch (e) {
       setIsListening(false);
       isListeningRef.current = false;
+      setIsSpeaking(false);
     }
   };
 
@@ -176,17 +203,16 @@ export default function SwitchboardPage() {
     if (isListening) {
       isListeningRef.current = false;
       setIsListening(false);
+      setIsSpeaking(false);
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
       try {
-        recognitionRef.current?.stop();
+        recognitionRef.current?.abort();
       } catch (_) {}
       if (messageInput.trim()) {
         const candidate = messageInput.trim();
-        if (candidate.toLowerCase() !== lastSentTextRef.current.toLowerCase()) {
-          lastSentTextRef.current = candidate;
-          handleSendMessage(candidate);
-        }
         setMessageInput("");
+        handleSendMessage(candidate);
       }
       return;
     }
@@ -194,7 +220,7 @@ export default function SwitchboardPage() {
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert("Microphone voice recognition is supported on Chrome, Edge, and modern browsers.");
+      alert("Microphone voice recognition is supported on Chrome, Edge, and modern Chromium browsers.");
       return;
     }
 
@@ -330,11 +356,16 @@ export default function SwitchboardPage() {
     const textToSend = (customText || messageInput).trim();
     if (!textToSend || !activeCallItem) return;
 
-    // Prevent immediate accidental duplicate submissions
-    if (!customText && textToSend.toLowerCase() === lastSentTextRef.current.toLowerCase()) {
+    // Production-level deduplication: prevent identical submissions within 2.5 seconds
+    const now = Date.now();
+    if (
+      textToSend.toLowerCase() === lastSentTextRef.current.toLowerCase() &&
+      now - lastSentTimeRef.current < 2500
+    ) {
       return;
     }
     lastSentTextRef.current = textToSend;
+    lastSentTimeRef.current = now;
 
     setSending(true);
     try {
@@ -348,7 +379,7 @@ export default function SwitchboardPage() {
         // Will also be received over WS
       }
     } catch (err) {
-      alert("Failed to send message over call.");
+      console.error("Failed to send message over call:", err);
     } finally {
       setSending(false);
     }
@@ -758,6 +789,30 @@ export default function SwitchboardPage() {
                     </button>
                   </div>
                 </div>
+
+                {/* Live Mic Listening Visual Wave Bar */}
+                {isListening && (
+                  <div className="flex items-center justify-between px-3.5 py-2 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 animate-fade-in text-[11px]">
+                    <div className="flex items-center gap-2.5">
+                      <span className="relative flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                      </span>
+                      <span className="font-semibold">
+                        {isSpeaking ? "Voice detected — capturing speech..." : "Continuous Mic Active — Speak into your microphone"}
+                      </span>
+                      <div className="flex items-end gap-0.5 h-3.5 ml-1">
+                        <span className={`w-0.5 bg-rose-400 rounded-full transition-all duration-150 ${isSpeaking ? "h-3 animate-pulse" : "h-1"}`} />
+                        <span className={`w-0.5 bg-rose-400 rounded-full transition-all duration-150 ${isSpeaking ? "h-3.5 animate-bounce" : "h-1.5"}`} />
+                        <span className={`w-0.5 bg-rose-400 rounded-full transition-all duration-150 ${isSpeaking ? "h-2 animate-pulse" : "h-1"}`} />
+                        <span className={`w-0.5 bg-rose-400 rounded-full transition-all duration-150 ${isSpeaking ? "h-3.5 animate-bounce" : "h-1.5"}`} />
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-white/50 hidden sm:inline">
+                      {autoSendVoice ? "Auto-dispatches after natural pause (1.1s)" : "Click Send when finished"}
+                    </span>
+                  </div>
+                )}
 
                 {/* Custom Message Input with Voice Mic */}
                 <form
