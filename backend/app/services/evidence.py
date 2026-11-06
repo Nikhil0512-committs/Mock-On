@@ -130,7 +130,7 @@ def generate_evidence_pdf(case: dict, promises: list[dict], utterances: list[dic
         "Subtitle", fontName="Helvetica", fontSize=10,
         textColor=MID_GREY, spaceAfter=10
     )
-    story.append(Paragraph("MOCK-ON AI CONSUMER ADVOCATE", title_style))
+    story.append(Paragraph("MOCK-ON CONSUMER AI PERSONAL ASSISTANT", title_style))
     story.append(Paragraph("Verified Evidence Pack & Statutory Dispute Record · Single Source of Truth", subtitle_style))
     story.append(HRFlowable(width="100%", color=ACCENT, thickness=2))
     story.append(Spacer(1, 6 * mm))
@@ -313,7 +313,7 @@ def generate_nch_legal_notice_pdf(case: dict, promises: list[dict], utterances: 
             Paragraph("<b>RESPONDENT ENTITY:</b>", body_bold),
         ],
         [
-            Paragraph(f"<b>Name:</b> {consumer_name}<br/><b>Identifier / Account:</b> {identifier}<br/><b>Registered Phone:</b> {phone}<br/><b>Authorized Proxy:</b> Mock-On Autonomous AI Advocate (IT Act Sec 10A)", body),
+            Paragraph(f"<b>Name:</b> {consumer_name}<br/><b>Identifier / Account:</b> {identifier}<br/><b>Registered Phone:</b> {phone}<br/><b>Authorized Proxy:</b> Mock-On Autonomous AI Personal Assistant (IT Act Sec 10A)", body),
             Paragraph(f"<b>Enterprise:</b> {provider}<br/><b>Grievance Desk Ref:</b> #{ticket_no}<br/><b>Forum Target:</b> National Consumer Helpline / Sectoral Ombudsman<br/><b>Jurisdiction:</b> Consumer Protection Act 2019", body),
         ]
     ]
@@ -422,7 +422,7 @@ def generate_nch_legal_notice_pdf(case: dict, promises: list[dict], utterances: 
 
     # Verification / Footer
     story.append(Paragraph(
-        f"<b>Verified & Dispatched By:</b> Mock-On Autonomous AI Advocate on behalf of <b>{consumer_name}</b><br/>"
+        f"<b>Verified & Dispatched By:</b> Mock-On Autonomous AI Personal Assistant on behalf of <b>{consumer_name}</b><br/>"
         f"<i>Cryptographically signed via armour365™ Voice Biometric & IT Act Section 10A Proxy Mandate.</i>",
         body
     ))

@@ -204,10 +204,12 @@ function PromiseCard({
   promise,
   caseData,
   onSelectCase,
+  onGenerateNotice,
 }: {
   promise: HPromise;
   caseData?: Case;
   onSelectCase?: (c: Case) => void;
+  onGenerateNotice?: (caseId: string) => void;
 }) {
   const config = STATUS_CONFIG[promise.status] || STATUS_CONFIG.pending;
   const Icon = config.icon;
@@ -365,13 +367,29 @@ function PromiseCard({
       </div>
 
       {/* Meta */}
-      <div className="flex items-center justify-between text-xs text-white/30 pt-1 border-t border-white/5">
-        <span>ID: {promise.id.slice(0, 12)}…</span>
-        {promise.extraction_confidence != null && (
-          <span>Confidence: {Math.round(promise.extraction_confidence * 100)}%</span>
-        )}
-        {promise.follow_up_allowed && (
-          <span className="text-brand-400">Follow-up enabled</span>
+      <div className="flex items-center justify-between text-xs text-white/30 pt-2 border-t border-white/5 flex-wrap gap-2">
+        <div className="flex items-center gap-3">
+          <span>ID: {promise.id.slice(0, 12)}…</span>
+          {promise.extraction_confidence != null && (
+            <span>Confidence: {Math.round(promise.extraction_confidence * 100)}%</span>
+          )}
+          {promise.follow_up_allowed && (
+            <span className="text-brand-400">Follow-up enabled</span>
+          )}
+        </div>
+        {onGenerateNotice && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onGenerateNotice(promise.case_id);
+            }}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-semibold transition-all hover:scale-[1.02]"
+            title="Generate formal 1-click NCH / RBI Grievance Dossier for this commitment"
+          >
+            <Scale className="w-3.5 h-3.5 text-amber-400" />
+            <span>NCH / RBI Notice</span>
+          </button>
         )}
       </div>
     </div>
@@ -947,6 +965,7 @@ export default function LedgerPage() {
                       setActiveCase(c);
                       setViewScope("case");
                     }}
+                    onGenerateNotice={(caseId) => setLegalNoticeCaseId(caseId)}
                   />
                 );
               })}

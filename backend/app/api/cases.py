@@ -286,7 +286,7 @@ async def get_transcript_txt(case_id: str, db: AsyncSession = Depends(get_db)):
 
     lines = [
         "=" * 80,
-        "MOCK-ON AI CONSUMER ADVOCATE — CERTIFIED CALL TRANSCRIPT & AUDIT RECORD",
+        "MOCK-ON CONSUMER AI PERSONAL ASSISTANT — CERTIFIED CALL TRANSCRIPT & AUDIT RECORD",
         "=" * 80,
         f"Case Reference ID : {case.id}",
         f"Dispute Domain    : {domain}",
@@ -530,7 +530,7 @@ Governing Authority: {framework['act']} & Consumer Protection Act 2019
 - Name of Aggrieved Consumer: {consumer_name}
 - Registered Mobile / Contact: {info.get('phone_number', '+91 91030 31412')}
 - Notification Email: {case.user_email or 'nikhilsharma5122006@gmail.com'}
-- Representation Proxy: Mock-On Autonomous AI Advocate (Authorized under IT Act 2000 Section 10A & armour365™ Voice Biometric Consent)
+- Representation Proxy: Mock-On Autonomous AI Personal Assistant (Authorized under IT Act 2000 Section 10A & armour365™ Voice Biometric Consent)
 
 2. RESPONDENT ENTITY:
 - Company / Merchant Name: {provider}

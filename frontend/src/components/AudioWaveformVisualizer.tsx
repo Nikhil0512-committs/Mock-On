@@ -160,7 +160,7 @@ export default function AudioWaveformVisualizer({
     }
     if (activeSpeaker === "user") {
       return {
-        label: "AI Personal Advocate Speaking (Statutory Mode)",
+        label: "AI Personal Assistant Speaking (Statutory Mode)",
         accent: "text-emerald-400",
         badgeBg: "bg-emerald-500/15 border-emerald-500/30 text-emerald-300",
         barGradient: "from-emerald-400 via-teal-300 to-emerald-500",

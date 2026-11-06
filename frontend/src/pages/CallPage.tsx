@@ -50,7 +50,7 @@ function SpeakerChip({ role }: { role: SpeakerRole }) {
   };
   const labels: Record<SpeakerRole, string> = {
     agent: "COMPANY REPRESENTATIVE",
-    user: "MOCK-ON AI ADVOCATE",
+    user: "SHIVANI (AI PERSONAL ASSISTANT)",
     ivr: "TELCO IVR",
     system: "SYSTEM RADAR",
   };
@@ -689,7 +689,7 @@ export default function CallPage() {
                     <span>Live Telephony Audio Channel Active</span>
                   </div>
                   <p className="text-xs text-white/60 max-w-sm mx-auto mt-1 leading-relaxed">
-                    Company support specialist has answered the line. Mock-On AI Advocate (Shivani) is actively negotiating and advocating on your behalf.
+                    Company support specialist has answered the line. Mock-On AI Personal Assistant (Shivani) is actively negotiating on your behalf.
                   </p>
                 </div>
               </div>
@@ -703,7 +703,7 @@ export default function CallPage() {
                 <div>
                   <h3 className="text-white font-bold text-base">No Call in Progress</h3>
                   <p className="text-xs text-white/50 max-w-sm mx-auto mt-1 leading-relaxed">
-                    Select a consumer dispute domain on the Intake page to dispatch the Mock-On AI advocate.
+                    Select a consumer dispute domain on the Intake page to dispatch the Mock-On AI personal assistant.
                   </p>
                 </div>
                 <button
@@ -735,12 +735,12 @@ export default function CallPage() {
                       : "bg-white/[0.04] border border-white/[0.08] text-white/50 text-xs"
                   }`}
                 >
-                  {/* AI Advocate Statutory CoT Reasoning */}
+                  {/* AI Personal Assistant Statutory CoT Reasoning */}
                   {u.speaker === "user" && u.thought_process && (
                     <div className="mb-2.5 p-2.5 rounded-xl bg-purple-950/50 border border-purple-500/30 text-purple-200 text-xs shadow-inner">
                       <div className="flex items-center gap-1.5 font-bold text-purple-300 uppercase tracking-wider text-[10px] mb-1">
                         <Brain className="w-3.5 h-3.5 text-purple-400 animate-pulse flex-shrink-0" />
-                        <span>AI Advocate Statutory Strategy (CoT)</span>
+                        <span>AI Personal Assistant Strategy (CoT)</span>
                       </div>
                       <p className="font-mono text-[11px] leading-relaxed text-purple-100/90">
                         {u.thought_process}
@@ -804,7 +804,7 @@ export default function CallPage() {
               <div className="flex items-center justify-between text-xs text-emerald-400">
                 <span className="flex items-center gap-1.5 font-bold">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  Mock-On AI Advocate is speaking with the Company Support Desk on your behalf
+                  Mock-On AI Personal Assistant is speaking with the Company Support Desk on your behalf
                 </span>
                 <span className="text-[10px] text-white/40">Autonomous Voice Mode &bull; You can listen in or optionally interject</span>
               </div>
@@ -1023,7 +1023,7 @@ export default function CallPage() {
                     </div>
                     <p className="text-[11px] leading-relaxed opacity-90">{evasionRadar.summary}</p>
                     <div className="pt-1 border-t border-white/10 text-[10px] text-white/90 font-mono">
-                      <strong className="text-brand-300">AI Advocate Action:</strong> {evasionRadar.counter_action}
+                      <strong className="text-brand-300">AI Assistant Action:</strong> {evasionRadar.counter_action}
                     </div>
                   </div>
                 ) : (

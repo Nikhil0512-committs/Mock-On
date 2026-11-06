@@ -440,7 +440,7 @@ class SarvamExtractor:
 
         history_lines = []
         for t in recent_turns[-6:]:
-            speaker = "Company Operator" if t.get("speaker_role") == "agent" else "AI Advocate"
+            speaker = "Company Operator" if t.get("speaker_role") == "agent" else "AI Personal Assistant"
             history_lines.append(f"{speaker}: {t.get('raw_text') or t.get('normalised_text')}")
         transcript_str = "\n".join(history_lines) if history_lines else "Call just started."
 
@@ -704,7 +704,7 @@ class SarvamExtractor:
             lower_rep
         ))
         if is_name_req:
-            thought = f"Autonomous Strategy: Supplying AI advocate identity and consumer name {consumer_name}."
+            thought = f"Autonomous Strategy: Supplying AI personal assistant identity and consumer name {consumer_name}."
             if is_hindi:
                 spoken = f"Main consumer {consumer_name} ki personal assistant Shivani bol rahi hoon."
             else:
@@ -933,7 +933,7 @@ class SarvamExtractor:
             return spoken, thought
 
         # 8. For nuanced / conversational turns, query Sarvam LLM via persistent pooled connection
-        thought = f"Autonomous Strategy: Formulating context-aware advocate response for {dispute_nature}."
+        thought = f"Autonomous Strategy: Formulating context-aware assistant response for {dispute_nature}."
         try:
             url = f"{self.base_url}/chat/completions"
             client = _get_sarvam_client()

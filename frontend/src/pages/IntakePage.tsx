@@ -428,7 +428,7 @@ export default function IntakePage() {
     setIsPlayingVoiceToken(true);
     try {
       const activeProvider = provider.trim() || selectedDomain.defaultProvider;
-      const text = `I, Nikhil Sharma, authorize Mock-On AI Advocate Shivani to represent my grievance for ${activeProvider} under IT Act 2000 Section 10A and armour365 biometric consent.`;
+      const text = `I, Nikhil Sharma, authorize Mock-On AI Personal Assistant Shivani to represent my grievance for ${activeProvider} under IT Act 2000 Section 10A and armour365 biometric consent.`;
       if ("speechSynthesis" in window) {
         window.speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(text);
@@ -621,7 +621,7 @@ export default function IntakePage() {
           <div className="inline-flex items-center gap-2 bg-brand-500/10 border border-brand-500/20 rounded-full px-3 py-1 mb-1">
             <span className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse" />
             <span className="text-brand-300 text-xs font-semibold tracking-wide">
-              Voice-First Consumer Advocate
+              Voice-First AI Personal Assistant
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
@@ -1062,7 +1062,7 @@ export default function IntakePage() {
             </div>
 
             <div className="p-2.5 rounded-xl bg-black/40 border border-white/[0.06] text-[11px] text-white/70 italic leading-relaxed">
-              &ldquo;I, {currentUser?.full_name || "Nikhil Sharma"}, authorize Mock-On AI Advocate Shivani to represent my grievance for {provider.trim() || selectedDomain.defaultProvider} under IT Act 2000 Section 10A and armour365™ biometric consent.&rdquo;
+              &ldquo;I, {currentUser?.full_name || "Nikhil Sharma"}, authorize Mock-On AI Personal Assistant Shivani to represent my grievance for {provider.trim() || selectedDomain.defaultProvider} under IT Act 2000 Section 10A and armour365™ biometric consent.&rdquo;
             </div>
 
             <label className="flex items-center gap-2.5 cursor-pointer text-xs text-white/80 hover:text-white select-none pt-0.5">

@@ -109,7 +109,7 @@ export default function FamilyPage() {
           Case Status & Settlement Tracker
         </h1>
         <p className="text-white/50 text-sm max-w-lg mx-auto leading-relaxed">
-          Real-time dispute commitments and refund tracking recorded by Mock-On Voice-First AI Advocate.
+          Real-time dispute commitments and refund tracking recorded by Mock-On Voice-First AI Personal Assistant.
         </p>
       </div>
 

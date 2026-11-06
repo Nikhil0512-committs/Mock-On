@@ -217,7 +217,7 @@ def _render_page(
       <svg viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
       </svg>
-      Mock-On Consumer Advocate
+      Mock-On Consumer AI Personal Assistant
     </div>
     <div class="icon">{icon_char}</div>
     <div>
@@ -464,7 +464,7 @@ async def handle_resolution_response(
               &bull; <strong>Prior Ticket Reference:</strong> #{ticket_no}<br/>
               &bull; <strong>Unfulfilled Disputed Sum:</strong> {amount_str}<br/>
               &bull; <strong>Account Identifier:</strong> {id_disp}<br/>
-              &bull; <strong>Call Status:</strong> Ringing on {provider} Support Desk &bull; AI Advocate standing by
+              &bull; <strong>Call Status:</strong> Ringing on {provider} Support Desk &bull; AI Personal Assistant standing by
             </div>
             """
 

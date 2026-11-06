@@ -54,8 +54,8 @@ function NavigationBar({
               <span className="font-bold text-base tracking-tight text-white group-hover:text-brand-200 transition-colors">
                 Mock-On
               </span>
-              <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-brand-500/10 text-brand-300 border border-brand-500/25">
-                AI Advocate
+              <span className="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-300 border border-brand-500/25">
+                AI Personal Assistant
               </span>
             </div>
           </NavLink>

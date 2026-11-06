@@ -271,7 +271,7 @@ class EmailService:
             <div class="content">
               <div class="summary-box">
                 <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: #4f46e5; margin-bottom: 6px; letter-spacing: 0.05em;">
-                  Executive Summary &bull; Personal AI Advocate (Shivani)
+                  Executive Summary &bull; AI Personal Assistant (Shivani)
                 </div>
                 {summary_text}
               </div>
@@ -311,7 +311,7 @@ class EmailService:
             </div>
 
             <div class="footer">
-              Mock-On &bull; Voice-First AI Consumer Advocate &bull; Powered by Gnani AI & Sarvam AI
+              Mock-On &bull; Voice-First AI Personal Assistant &bull; Powered by Gnani AI & Sarvam AI
             </div>
           </div>
         </body>
@@ -492,10 +492,10 @@ class EmailService:
         goal: str = "Dispute billing charges",
         force: bool = False,
     ) -> bool:
-        """Send notification when an AI Advocate call has been dispatched."""
+        """Send notification when an AI Personal Assistant call has been dispatched."""
         if not force and self._is_duplicate(f"dispatched:{to_email}:{case_id}:{ticket_number}", cooldown_seconds=300):
             return True
-        subject = f"[Mock-On] Call Dispatched: AI Advocate contacting {provider} (Docket #{ticket_number})"
+        subject = f"[Mock-On] Call Dispatched: AI Personal Assistant contacting {provider} (Docket #{ticket_number})"
         case_url = f"{settings.public_frontend_url}/call"
 
         html_body = f"""
@@ -517,9 +517,9 @@ class EmailService:
         <body>
           <div class="container">
             <div class="header">
-              <span class="badge">Live Advocate Dispatch</span>
+              <span class="badge">Live AI Personal Assistant Dispatch</span>
               <h1 style="font-size: 22px; margin: 12px 0 6px 0;">Mock-On AI Call Initiated</h1>
-              <p style="font-size: 13px; opacity: 0.9; margin: 0;">Our AI Advocate has connected to {provider} regarding your grievance.</p>
+              <p style="font-size: 13px; opacity: 0.9; margin: 0;">Our AI Personal Assistant has connected to {provider} regarding your grievance.</p>
             </div>
             <div class="content">
               <p style="font-size: 15px; color: #1e293b; line-height: 1.5; margin-top: 0;">

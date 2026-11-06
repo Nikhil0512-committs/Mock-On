@@ -303,7 +303,7 @@ async def twilio_stream_websocket(websocket: WebSocket, call_id: str):
                     send_timbre_speech(
                         websocket,
                         stream_sid,
-                        "Namaskar, Mock-On AI Consumer Advocate active. How may I assist your dispute today?",
+                        "Namaskar, Mock-On Consumer AI Personal Assistant active. How may I assist your dispute today?",
                     )
                 )
 

@@ -643,7 +643,7 @@ export default function SwitchboardPage() {
               </span>
             </div>
             <p className="text-xs text-white/50 mt-0.5">
-              Answer live consumer advocate disputes, converse with the AI advocate, and negotiate resolutions.
+              Answer live consumer disputes, converse with the AI personal assistant, and negotiate resolutions.
             </p>
           </div>
         </div>
@@ -773,7 +773,7 @@ export default function SwitchboardPage() {
               <li>Open Mock-On in two browser windows or tabs.</li>
               <li>In Window 1, submit an intake grievance and select <b>"Live Company Operator (Switchboard)"</b>.</li>
               <li>In Window 2 (this Switchboard), the incoming call rings immediately.</li>
-              <li>Click <b>"Answer &amp; Connect Call"</b> to converse live with Advocate AI and negotiate the refund.</li>
+              <li>Click <b>"Answer &amp; Connect Call"</b> to converse live with AI Personal Assistant and negotiate the refund.</li>
             </ol>
           </div>
         </div>
@@ -791,7 +791,7 @@ export default function SwitchboardPage() {
                   </div>
                   <div>
                     <div className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                      <span>LIVE WITH CONSUMER ADVOCATE</span>
+                      <span>LIVE WITH CONSUMER AI PERSONAL ASSISTANT</span>
                       {((activeCallItem.case.approved_info as any)?.is_follow_up || (activeCallItem.case.goal || "").includes("OVERDUE")) && (
                         <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-rose-500/25 text-rose-300 border border-rose-500/40 font-bold uppercase">
                           Overdue Follow-Up
@@ -843,7 +843,7 @@ export default function SwitchboardPage() {
                   <div className="flex items-center gap-2 text-xs text-rose-300 font-semibold">
                     <XCircle className="w-4 h-4 text-rose-400" />
                     <span>
-                      Refusal Recorded: Zero Promises Extracted &bull; Advocate AI Notified for Ombudsman Escalation
+                      Refusal Recorded: Zero Promises Extracted &bull; AI Personal Assistant Notified for Ombudsman Escalation
                     </span>
                   </div>
                   <span className="text-[10px] text-rose-400 font-mono bg-rose-500/20 px-2 py-0.5 rounded-full">
@@ -877,7 +877,7 @@ export default function SwitchboardPage() {
                                 : "bg-brand-500/20 text-brand-300 border border-brand-500/30"
                             }`}
                           >
-                            {isOperator ? "YOU (COMPANY REPRESENTATIVE)" : "MOCK-ON AI ADVOCATE (SHIVANI)"}
+                            {isOperator ? "YOU (COMPANY REPRESENTATIVE)" : "MOCK-ON AI PERSONAL ASSISTANT (SHIVANI)"}
                           </span>
                         </div>
                         <div
@@ -942,7 +942,7 @@ export default function SwitchboardPage() {
                       <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
                       2. Step-by-Step Dialogue (Ask specific questions):
                     </span>
-                    <span className="text-[10px] text-white/40">Advocate answers specifically as asked</span>
+                    <span className="text-[10px] text-white/40">AI assistant answers specifically as asked</span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     <button
@@ -1019,7 +1019,7 @@ export default function SwitchboardPage() {
                       </span>
                       <span className="font-semibold">
                         {isAdvocateSpeaking
-                          ? "AI Advocate is speaking... (Mic paused to prevent echo)"
+                          ? "AI Personal Assistant is speaking... (Mic paused to prevent echo)"
                           : isSpeaking
                           ? "Voice detected — capturing speech cleanly..."
                           : "Continuous Mic Active — Speak naturally as operator"}
@@ -1090,7 +1090,7 @@ export default function SwitchboardPage() {
                     placeholder={
                       isListening
                         ? "Listening to representative voice... Speak now"
-                        : "Type representative response or speak to advocate..."
+                        : "Type representative response or speak to AI personal assistant..."
                     }
                     disabled={sending}
                     className="flex-1 input py-2.5 text-xs bg-black/40 border-white/[0.1] rounded-xl focus:border-rose-500/60"
