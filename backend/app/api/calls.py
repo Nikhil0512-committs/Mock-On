@@ -621,7 +621,8 @@ async def execute_call_end(call_id: str, reason: Optional[str] = None) -> dict:
             p.user_confirmation_timestamp = datetime.now(timezone.utc)
             p.follow_up_allowed = True
             if not p.due_at:
-                p.due_at = datetime.now(timezone.utc) + timedelta(days=5)
+                from app.services.deadline_worker import get_demo_now
+                p.due_at = get_demo_now() + timedelta(days=5)
         await db.commit()
 
         # Determine whether a genuine commitment or resolution was logged

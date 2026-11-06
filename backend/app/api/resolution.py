@@ -455,7 +455,7 @@ async def handle_resolution_response(
                     )
                 )
 
-            call_url = f"{settings.public_frontend_url}/call"
+            call_url = f"{settings.public_frontend_url}/call?case_id={promise.case_id}"
 
             details_box = f"""
             <div class="box">

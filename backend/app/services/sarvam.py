@@ -498,6 +498,14 @@ class SarvamExtractor:
             f"4. NO REPETITION: Never re-introduce yourself if you already did so."
         )
 
+        if is_follow_up:
+            system_instruction += (
+                f"\n\n5. URGENT OVERDUE FOLLOW-UP DIRECTIVE:\n"
+                f"- This is an ESCALATED FOLLOW-UP CALL for overdue Ticket #{ticket}.\n"
+                f"- On the previous call, {provider} agreed to refund Rs {amt} within the agreed SLA, but the deadline expired and consumer {consumer_name} confirmed NO refund was credited.\n"
+                f"- You are fighting firmly for {consumer_name}'s money. Under the Consumer Protection Act 2019 and statutory regulations, demand immediate refund reversal. Do NOT accept vague excuses or further delay without escalating to the Statutory Ombudsman / Appellate Authority."
+            )
+
         user_content = (
             f"Conversation history:\n{transcript_str}\n\n"
             f"Representative just said: \"{rep_latest_text}\"\n\n"
@@ -742,6 +750,19 @@ class SarvamExtractor:
             lower_rep
         ))
         if is_prob_req:
+            if is_follow_up:
+                thought = f"Autonomous Strategy: Explaining overdue Ticket #{ticket} SLA breach and demanding immediate monetary restitution."
+                if is_hindi:
+                    spoken = (
+                        f"Mamla yeh hai ki unke overdue Ticket #{ticket} par aapki team ne Rs {amt} refund ka commitment diya tha, "
+                        f"par deadline nikalne ke baad bhi consumer ko refund nahi mila. Hum Consumer Protection Act ke tahat turant Rs {amt} ka reversal demand kar rahe hain."
+                    )
+                else:
+                    spoken = (
+                        f"On our prior call for Ticket #{ticket}, your company formally committed to refund Rs {amt}. "
+                        f"That deadline has passed and the funds were not credited. We demand immediate reversal of Rs {amt} under statutory consumer protection regulations."
+                    )
+                return spoken, thought
             thought = f"Autonomous Strategy: Providing factual synopsis of {dispute_nature} based on docket."
             prob_desc = goal if len(goal) > 15 else (default_prob_hindi if is_hindi else default_prob_en)
             if is_hindi:
@@ -753,6 +774,13 @@ class SarvamExtractor:
         # 4.8 Desired resolution
         is_res_req = bool(re.search(r"\b(resolution|want|chahte|samadhan|solution|settlement|kya\s*chahiye)\b", lower_rep))
         if is_res_req:
+            if is_follow_up:
+                thought = f"Autonomous Strategy: Demanding direct refund on overdue Ticket #{ticket} without further stalling."
+                if is_hindi:
+                    spoken = f"Consumer {consumer_name} ko overdue Ticket #{ticket} par unka pura Rs {amt} ka refund turant chahiye, bina kisi further delay ke."
+                else:
+                    spoken = f"We demand immediate credit processing of Rs {amt} on Ticket #{ticket} to the original payment source without further delays."
+                return spoken, thought
             thought = f"Autonomous Strategy: Demanding direct monetary restitution of Rs {amt}."
             spoken = default_res_hindi if is_hindi else default_res_en
             return spoken, thought
@@ -797,6 +825,25 @@ class SarvamExtractor:
             lower_rep
         ))
         if is_rep_greeting and has_introduced:
+            if is_follow_up:
+                thought = (
+                    f"Autonomous Strategy: Representative offered assistance on overdue follow-up call. "
+                    f"Stating overdue status of Ticket #{ticket} and demanding immediate credit reversal of Rs {amt}."
+                )
+                if is_hindi:
+                    spoken = (
+                        f"Ji representative ji, main {consumer_name} ke overdue Ticket #{ticket} ke regarding baat kar rahi hoon. "
+                        f"Aapki company ne Rs {amt} refund ka commitment diya tha jo ki overdue ho chuka hai. "
+                        f"Consumer Protection Act ke mutabik kripya account number {id_val} par turant iska credit reversal confirm karein."
+                    )
+                else:
+                    spoken = (
+                        f"Thank you representative. I am following up on {consumer_name}'s overdue Ticket #{ticket} for Rs {amt}. "
+                        f"Your team committed to this refund but the deadline expired. Under statutory consumer protection regulations, "
+                        f"we require immediate confirmation of this credit to account {id_val}."
+                    )
+                return spoken, thought
+
             thought = (
                 f"Autonomous Strategy: Representative opened floor / offered assistance. Stating grievance facts "
                 f"and requesting account check for {id_type} '{id_val}' without repeating introduction."

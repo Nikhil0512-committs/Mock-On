@@ -76,6 +76,9 @@ async def confirm_promise(
             existing.due_at = payload.corrected_due_at
         if payload.corrected_summary:
             existing.summary = payload.corrected_summary
+        if not existing.due_at:
+            from app.services.deadline_worker import get_demo_now
+            existing.due_at = get_demo_now() + timedelta(days=5)
         if payload.enable_follow_up:
             existing.follow_up_allowed = True
             existing.approval_timestamp = datetime.now(timezone.utc)

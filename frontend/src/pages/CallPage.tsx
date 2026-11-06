@@ -4,7 +4,7 @@
  * Elevated with modern 21st.dev / shadcn-style split terminal design.
  */
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Phone,
   PhoneOff,
@@ -76,6 +76,8 @@ function HoldIndicator() {
 
 export default function CallPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const queryCaseId = searchParams.get("case_id");
   const transcriptRef = useRef<HTMLDivElement>(null);
   const [familyModalOpen, setFamilyModalOpen] = useState(false);
   const [summaryModalOpen, setSummaryModalOpen] = useState(false);
@@ -211,28 +213,42 @@ export default function CallPage() {
     }
   }, [activeCall?.id]);
 
-  // If activeCase is set but activeCall is null (e.g. page refresh), fetch latest call for case
+  // If case_id is passed in query params (e.g. from follow-up email dispatch), activate it
   useEffect(() => {
-    if (activeCase && !activeCall) {
+    if (queryCaseId && (!activeCase || activeCase.id !== queryCaseId)) {
+      casesApi
+        .get(queryCaseId)
+        .then((c) => {
+          if (c) setActiveCase(c);
+        })
+        .catch(() => {});
+    }
+  }, [queryCaseId, activeCase?.id]);
+
+  // If activeCase is set, ensure we have the latest active/ringing call (e.g. priority follow-up call)
+  useEffect(() => {
+    if (activeCase) {
       callsApi
         .getLatestForCase(activeCase.id)
         .then((latestCall) => {
           if (latestCall) {
-            setActiveCall(latestCall);
-            if (
-              latestCall.status === "ringing" ||
-              latestCall.status === "active" ||
-              latestCall.status === "initialising"
-            ) {
-              setCallStatus(latestCall.status);
-              setCallEndInfo(null);
-              setSummaryModalOpen(false);
+            if (!activeCall || activeCall.id !== latestCall.id) {
+              setActiveCall(latestCall);
+              if (
+                latestCall.status === "ringing" ||
+                latestCall.status === "active" ||
+                latestCall.status === "initialising"
+              ) {
+                setCallStatus(latestCall.status);
+                setCallEndInfo(null);
+                setSummaryModalOpen(false);
+              }
             }
           }
         })
         .catch(() => {});
     }
-  }, [activeCase?.id, activeCall]);
+  }, [activeCase?.id, activeCall?.id, activeCall?.status]);
 
   // If no active case in store, try fetching the most recent case from API
   useEffect(() => {

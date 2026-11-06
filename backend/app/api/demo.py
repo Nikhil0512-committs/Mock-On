@@ -11,15 +11,21 @@ async def advance_clock(days: float = 1.0):
     Advance the simulated demo clock by N days.
     Immediately triggers the deadline worker tick to process overdue promises and callbacks.
     """
+    import logging
+    logger = logging.getLogger(__name__)
     from app.services.deadline_worker import deadline_worker
     new_time = advance_demo_clock(days)
+    tick_error = None
     try:
         await deadline_worker._tick()
+        logger.info(f"Simulated clock advanced by {days} days to {new_time.isoformat()} and triggered deadline worker tick.")
     except Exception as e:
-        pass
+        logger.error(f"Error during deadline worker tick on clock advance: {e}", exc_info=True)
+        tick_error = str(e)
     return {
         "advanced_days": days,
         "simulated_now": new_time.isoformat(),
+        "tick_error": tick_error,
     }
 
 

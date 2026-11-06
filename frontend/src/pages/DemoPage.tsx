@@ -48,12 +48,14 @@ export default function DemoPage() {
     demoApi.getStatus().then(setHealth).catch(() => {});
   }, []);
 
-  const handleAdvanceClock = async () => {
+  const handleAdvanceClock = async (customDays?: number) => {
+    const days = typeof customDays === "number" ? customDays : daysToAdvance;
     setAdvancing(true);
     try {
-      const r = await demoApi.advanceClock(daysToAdvance);
+      const r = await demoApi.advanceClock(days);
       setSimulatedNow(r.simulated_now);
-      addLog(`Clock advanced by ${daysToAdvance} day(s) → ${formatDateSafe(r.simulated_now, "dd MMM yyyy HH:mm", "Now")} IST`);
+      addLog(`Clock advanced by ${days} day(s) → ${formatDateSafe(r.simulated_now, "dd MMM yyyy HH:mm", "Now")} IST`);
+      addLog("Deadline worker triggered: If 5-day SLA is reached, check-in email is dispatched.");
       if (activeCase) {
         const updated = await promisesApi.listForCase(activeCase.id).catch(() => []);
         setPromises(updated);
@@ -114,6 +116,33 @@ export default function DemoPage() {
             </div>
           </div>
 
+          {/* Quick Presets */}
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <span className="text-xs text-white/50 font-medium">Quick Presets:</span>
+            {[
+              { label: "+1 Day", days: 1 },
+              { label: "+3 Days", days: 3 },
+              { label: "+5 Days (Trigger Check-in Email)", days: 5, highlight: true },
+              { label: "+7 Days", days: 7 },
+            ].map((p) => (
+              <button
+                key={p.days}
+                onClick={() => {
+                  setDaysToAdvance(p.days);
+                  handleAdvanceClock(p.days);
+                }}
+                disabled={advancing}
+                className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-all ${
+                  p.highlight
+                    ? "bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25 shadow-sm"
+                    : "bg-white/[0.04] text-white/70 border-white/10 hover:bg-white/[0.08] hover:text-white"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
           <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3.5">
             <div className="flex-1">
               <label className="text-xs font-semibold text-white/60 mb-1.5 block">
@@ -131,7 +160,7 @@ export default function DemoPage() {
             </div>
             <button
               id="advance-clock-btn"
-              onClick={handleAdvanceClock}
+              onClick={() => handleAdvanceClock()}
               disabled={advancing}
               className="btn-primary py-3 px-6 rounded-xl flex items-center justify-center gap-2 text-sm font-bold shadow-lg shadow-brand-500/25 whitespace-nowrap"
             >

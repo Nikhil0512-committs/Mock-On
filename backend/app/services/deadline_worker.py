@@ -76,7 +76,8 @@ class DeadlineWorker:
         # Fetch all non-terminal promises with due_at
         result = await db.execute(
             select(Promise).where(
-                Promise.status.in_(["pending", "due_soon"]),
+                Promise.status.in_(["pending", "due_soon", "overdue"]),
+                Promise.status != "fulfilled",
                 Promise.due_at.is_not(None),
             )
         )
@@ -96,8 +97,9 @@ class DeadlineWorker:
 
             curr_now = now if now.tzinfo is not None else now.replace(tzinfo=timezone.utc)
 
-            if curr_now >= due_utc and p.status != "overdue":
-                await ledger.transition(db, p, "overdue", "deadline_passed", {"now": curr_now.isoformat()})
+            if curr_now >= due_utc:
+                if p.status != "overdue":
+                    await ledger.transition(db, p, "overdue", "deadline_passed", {"now": curr_now.isoformat()})
                 
                 # Send 5-day deadline check-in email with Yes/No action buttons (Strictly idempotent: sent once)
                 meta = dict(p.metadata_ or {})
@@ -127,9 +129,9 @@ class DeadlineWorker:
                             phrase = (
                                 getattr(p, "raw_date_phrase", None)
                                 or getattr(p, "deadline_phrase", None)
-                                or "agreed resolution timeline"
+                                or "5 business days"
                             )
-                            await email_service.send_deadline_checkin(
+                            sent_ok = await email_service.send_deadline_checkin(
                                 to_email=target_email,
                                 case_id=p.case_id,
                                 promise_id=p.id,
@@ -138,9 +140,13 @@ class DeadlineWorker:
                                 amount_str=amt_str,
                                 due_date_str=phrase,
                             )
-                            meta["checkin_email_sent"] = True
-                            meta["checkin_email_sent_at"] = curr_now.isoformat()
-                            p.metadata_ = meta
+                            if sent_ok:
+                                meta["checkin_email_sent"] = True
+                                meta["checkin_email_sent_at"] = curr_now.isoformat()
+                                p.metadata_ = meta
+                                from sqlalchemy.orm.attributes import flag_modified
+                                flag_modified(p, "metadata_")
+                                logger.info(f"Deadline check-in email delivered to {target_email} for promise {p.id}")
                     except Exception as mail_err:
                         logger.error(f"Failed to send deadline check-in email: {mail_err}")
 
