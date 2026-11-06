@@ -71,128 +71,6 @@ function formatDateSafe(dateVal: any, fmt = "dd MMM yyyy", fallback = "Recent"):
   }
 }
 
-function PromiseCard({ promise }: { promise: HPromise }) {
-  const config = STATUS_CONFIG[promise.status] || STATUS_CONFIG.pending;
-  const Icon = config.icon;
-
-  return (
-    <div
-      className={`card p-5 space-y-4 animate-slide-up transition-all duration-300 hover:border-brand-500/30 ${
-        promise.status === "overdue"
-          ? "border-red-500/30"
-          : promise.status === "due_soon"
-          ? "border-amber-500/30"
-          : promise.status === "fulfilled"
-          ? "border-green-500/20"
-          : ""
-      }`}
-    >
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <div
-            className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-              promise.status === "overdue"
-                ? "bg-red-500/20"
-                : promise.status === "due_soon"
-                ? "bg-amber-500/20"
-                : promise.status === "fulfilled"
-                ? "bg-green-500/20"
-                : "bg-white/10"
-            }`}
-          >
-            <Icon
-              className={`w-4 h-4 ${
-                promise.status === "overdue"
-                  ? "text-red-400"
-                  : promise.status === "due_soon"
-                  ? "text-amber-400"
-                  : promise.status === "fulfilled"
-                  ? "text-green-400"
-                  : "text-white/60"
-              }`}
-            />
-          </div>
-          <div>
-            <div className="font-semibold text-white">
-              {COMMITMENT_LABELS[promise.commitment_type] || promise.commitment_type}
-            </div>
-            <div className="text-white/40 text-xs">
-              {promise.speaker_role.toUpperCase()} &bull;{" "}
-              {formatDateSafe(promise.created_at, "dd MMM yyyy HH:mm", "Recent")}
-            </div>
-          </div>
-        </div>
-        <span className={config.badgeClass}>
-          <Icon className="w-3 h-3" />
-          {config.label}
-        </span>
-      </div>
-
-      {/* Summary */}
-      <p className="text-white/70 text-sm leading-relaxed">{promise.summary}</p>
-
-      {/* Evidence quote */}
-      {promise.quoted_text && (
-        <blockquote className="text-white/50 text-sm italic border-l-2 border-brand-500/40 pl-3 leading-relaxed">
-          &ldquo;{promise.quoted_text}&rdquo;
-        </blockquote>
-      )}
-
-      {/* Details grid */}
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        {promise.amount != null && (
-          <div className="bg-white/5 rounded-lg px-3 py-2">
-            <div className="text-white/40 text-xs mb-0.5">Amount</div>
-            <div className="font-bold text-emerald-400">
-              {promise.currency ?? "₹"}
-              {promise.amount}
-            </div>
-          </div>
-        )}
-        {promise.due_at && (
-          <div
-            className={`rounded-lg px-3 py-2 ${
-              promise.status === "overdue"
-                ? "bg-red-500/10"
-                : promise.status === "due_soon"
-                ? "bg-amber-500/10"
-                : "bg-white/5"
-            }`}
-          >
-            <div className="text-white/40 text-xs mb-0.5">Due Date</div>
-            <div
-              className={`font-semibold text-sm ${
-                promise.status === "overdue"
-                  ? "text-red-300"
-                  : promise.status === "due_soon"
-                  ? "text-amber-300"
-                  : "text-white"
-              }`}
-            >
-              {formatDateSafe(promise.due_at, "dd MMM yyyy", "in 5 business days")}
-            </div>
-            {promise.raw_date_phrase && (
-              <div className="text-white/30 text-xs italic">&ldquo;{promise.raw_date_phrase}&rdquo;</div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Meta */}
-      <div className="flex items-center justify-between text-xs text-white/30 pt-1 border-t border-white/5">
-        <span>ID: {promise.id.slice(0, 12)}…</span>
-        {promise.extraction_confidence != null && (
-          <span>Confidence: {Math.round(promise.extraction_confidence * 100)}%</span>
-        )}
-        {promise.follow_up_allowed && (
-          <span className="text-brand-400">Follow-up enabled</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
 const VALID_DOMAIN_KEYS = [
   "telecom",
   "banking",
@@ -321,6 +199,184 @@ function getDomainMeta(domainKey: string) {
   );
 }
 
+function PromiseCard({
+  promise,
+  caseData,
+  onSelectCase,
+}: {
+  promise: HPromise;
+  caseData?: Case;
+  onSelectCase?: (c: Case) => void;
+}) {
+  const config = STATUS_CONFIG[promise.status] || STATUS_CONFIG.pending;
+  const Icon = config.icon;
+  const info = (caseData?.approved_info as Record<string, any>) || {};
+  const provider = info.service_provider || "Customer Support";
+  const ticket = info.ticket_number || (caseData ? `TKT-${caseData.id.slice(0, 8).toUpperCase()}` : null);
+  const identifier = info.identifier_value || info.phone_number;
+  const domainKey = caseData ? getDomainKey(caseData) : null;
+  const domainMeta = domainKey ? getDomainMeta(domainKey) : null;
+  const displayAmount =
+    promise.amount != null
+      ? promise.amount
+      : info.disputed_amount
+      ? String(info.disputed_amount).replace(/[^\d.]/g, "")
+      : null;
+
+  return (
+    <div
+      className={`card p-5 space-y-4 animate-slide-up transition-all duration-300 hover:border-brand-500/30 ${
+        promise.status === "overdue"
+          ? "border-red-500/30"
+          : promise.status === "due_soon"
+          ? "border-amber-500/30"
+          : promise.status === "fulfilled"
+          ? "border-green-500/20"
+          : ""
+      }`}
+    >
+      {/* Case/Request Header */}
+      {caseData && (
+        <div className="flex items-center justify-between pb-3 border-b border-white/[0.06] text-xs">
+          <div className="flex items-center gap-2 flex-wrap">
+            {domainMeta && (
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${domainMeta.badge}`}>
+                {domainMeta.label}
+              </span>
+            )}
+            <span className="font-bold text-white flex items-center gap-1.5">
+              <Building2 className="w-3.5 h-3.5 text-brand-400" />
+              <span>{provider}</span>
+            </span>
+            {ticket && (
+              <span className="text-brand-300/80 font-mono text-[11px]">
+                #{ticket}
+              </span>
+            )}
+            {identifier && (
+              <span className="text-white/40 text-[11px] font-mono">
+                &bull; {identifier}
+              </span>
+            )}
+          </div>
+          {onSelectCase && (
+            <button
+              onClick={() => onSelectCase(caseData)}
+              className="text-[11px] font-semibold text-brand-300 hover:text-brand-200 hover:underline flex items-center gap-1"
+            >
+              <span>View Dossier</span>
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div
+            className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+              promise.status === "overdue"
+                ? "bg-red-500/20"
+                : promise.status === "due_soon"
+                ? "bg-amber-500/20"
+                : promise.status === "fulfilled"
+                ? "bg-green-500/20"
+                : "bg-white/10"
+            }`}
+          >
+            <Icon
+              className={`w-4 h-4 ${
+                promise.status === "overdue"
+                  ? "text-red-400"
+                  : promise.status === "due_soon"
+                  ? "text-amber-400"
+                  : promise.status === "fulfilled"
+                  ? "text-green-400"
+                  : "text-white/60"
+              }`}
+            />
+          </div>
+          <div>
+            <div className="font-semibold text-white">
+              {COMMITMENT_LABELS[promise.commitment_type] || promise.commitment_type}
+            </div>
+            <div className="text-white/40 text-xs">
+              {promise.speaker_role.toUpperCase()} &bull;{" "}
+              {formatDateSafe(promise.created_at, "dd MMM yyyy HH:mm", "Recent")}
+            </div>
+          </div>
+        </div>
+        <span className={config.badgeClass}>
+          <Icon className="w-3 h-3" />
+          {config.label}
+        </span>
+      </div>
+
+      {/* Summary */}
+      <p className="text-white/70 text-sm leading-relaxed">{promise.summary}</p>
+
+      {/* Evidence quote */}
+      {promise.quoted_text && (
+        <blockquote className="text-white/50 text-sm italic border-l-2 border-brand-500/40 pl-3 leading-relaxed">
+          &ldquo;{promise.quoted_text}&rdquo;
+        </blockquote>
+      )}
+
+      {/* Details grid */}
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        {displayAmount != null && (
+          <div className="bg-white/5 rounded-lg px-3 py-2">
+            <div className="text-white/40 text-xs mb-0.5">Amount</div>
+            <div className="font-bold text-emerald-400">
+              {promise.currency ?? "₹"}
+              {displayAmount}
+            </div>
+          </div>
+        )}
+        {promise.due_at && (
+          <div
+            className={`rounded-lg px-3 py-2 ${
+              promise.status === "overdue"
+                ? "bg-red-500/10"
+                : promise.status === "due_soon"
+                ? "bg-amber-500/10"
+                : "bg-white/5"
+            }`}
+          >
+            <div className="text-white/40 text-xs mb-0.5">Due Date</div>
+            <div
+              className={`font-semibold text-sm ${
+                promise.status === "overdue"
+                  ? "text-red-300"
+                  : promise.status === "due_soon"
+                  ? "text-amber-300"
+                  : "text-white"
+              }`}
+            >
+              {formatDateSafe(promise.due_at, "dd MMM yyyy", "in 5 business days")}
+            </div>
+            {promise.raw_date_phrase && (
+              <div className="text-white/30 text-xs italic">&ldquo;{promise.raw_date_phrase}&rdquo;</div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Meta */}
+      <div className="flex items-center justify-between text-xs text-white/30 pt-1 border-t border-white/5">
+        <span>ID: {promise.id.slice(0, 12)}…</span>
+        {promise.extraction_confidence != null && (
+          <span>Confidence: {Math.round(promise.extraction_confidence * 100)}%</span>
+        )}
+        {promise.follow_up_allowed && (
+          <span className="text-brand-400">Follow-up enabled</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function LedgerPage() {
   const navigate = useNavigate();
   const { activeCase, setActiveCase, promises, setPromises } = useStore();
@@ -371,16 +427,26 @@ export default function LedgerPage() {
     loadCases();
   }, []);
 
+  const [allPromises, setAllPromises] = useState<HPromise[]>([]);
+  const [viewScope, setViewScope] = useState<"all" | "case">("all");
+
   const loadPromises = async () => {
-    if (!activeCase) return;
-    const data = await promisesApi.listForCase(activeCase.id).catch(() => []);
-    setPromises(data);
+    try {
+      const [allData, caseData] = await Promise.all([
+        promisesApi.listAll().catch(() => []),
+        activeCase ? promisesApi.listForCase(activeCase.id).catch(() => []) : Promise.resolve([]),
+      ]);
+      setAllPromises(allData || []);
+      if (activeCase) {
+        setPromises(caseData || []);
+      }
+    } catch (e) {
+      console.warn("Failed to load promises:", e);
+    }
   };
 
   useEffect(() => {
-    if (activeCase?.id) {
-      loadPromises();
-    }
+    loadPromises();
   }, [activeCase?.id]);
 
   const handleRefresh = async () => {
@@ -390,10 +456,20 @@ export default function LedgerPage() {
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const statuses = ["pending", "due_soon", "overdue", "fulfilled", "unable_to_verify"] as const;
 
+  const activeScopePromises =
+    viewScope === "all"
+      ? (selectedDomain === "all"
+          ? allPromises
+          : allPromises.filter((p) => {
+              const c = cases.find((cItem) => cItem.id === p.case_id);
+              return c && getDomainKey(c) === selectedDomain;
+            }))
+      : promises;
+
   const displayedPromises =
     selectedStatus === "all"
-      ? promises
-      : promises.filter((p) => p.status === selectedStatus);
+      ? activeScopePromises
+      : activeScopePromises.filter((p) => p.status === selectedStatus);
 
   // Distinct domain keys that actually have cases
   const presentDomainKeys = Array.from(new Set(cases.map((c) => getDomainKey(c))));
@@ -416,7 +492,7 @@ export default function LedgerPage() {
                 {cases.length} disputes recorded
               </span>
               <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                {promises.length} promises tracked
+                {allPromises.length > 0 ? allPromises.length : promises.length} commitments tracked
               </span>
             </div>
             <p className="text-xs sm:text-sm text-white/50 mt-1">
@@ -741,6 +817,45 @@ export default function LedgerPage() {
           );
         })()}
 
+        {/* Scope Switcher: All Requests vs Selected Dossier */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+          <div className="flex items-center gap-2 p-1 rounded-xl bg-white/[0.03] border border-white/[0.08] self-start sm:self-auto">
+            <button
+              onClick={() => setViewScope("all")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                viewScope === "all"
+                  ? "bg-brand-500 text-white shadow-md shadow-brand-500/20"
+                  : "text-white/60 hover:text-white"
+              }`}
+            >
+              <FolderArchive className="w-3.5 h-3.5" />
+              <span>All Requests ({allPromises.length})</span>
+            </button>
+            <button
+              onClick={() => setViewScope("case")}
+              disabled={!activeCase}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                viewScope === "case"
+                  ? "bg-brand-500 text-white shadow-md shadow-brand-500/20"
+                  : "text-white/60 hover:text-white"
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>
+                {activeCase
+                  ? `${(activeCase.approved_info as any)?.service_provider || "Selected"} (${promises.length})`
+                  : "No Dossier Selected"}
+              </span>
+            </button>
+          </div>
+
+          <span className="text-xs text-white/40">
+            {viewScope === "all"
+              ? `Showing all commitments across all ${cases.length} consumer requests.`
+              : `Filtered to ${(activeCase?.approved_info as any)?.service_provider || "active"} dispute dossier.`}
+          </span>
+        </div>
+
         {/* Sleek Segmented Status Filter Bar (Replaces the 5 huge clunky boxes!) */}
         <div className="flex items-center gap-1.5 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06] overflow-x-auto">
           <button
@@ -753,12 +868,12 @@ export default function LedgerPage() {
           >
             <span>All Commitments</span>
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/[0.08] text-white/80 font-mono">
-              {promises.length}
+              {activeScopePromises.length}
             </span>
           </button>
 
           {statuses.map((s) => {
-            const count = promises.filter((p) => p.status === s).length;
+            const count = activeScopePromises.filter((p) => p.status === s).length;
             const config = STATUS_CONFIG[s];
             const Icon = config.icon;
             const isSelected = selectedStatus === s;
@@ -788,13 +903,13 @@ export default function LedgerPage() {
         </div>
 
         {/* Promises Listing */}
-        {!activeCase ? (
+        {viewScope === "case" && !activeCase ? (
           <div className="text-center py-16 text-white/40 rounded-2xl border border-white/[0.06] bg-white/[0.01]">
             <FileText className="w-10 h-10 mx-auto mb-3 opacity-25 text-brand-400" />
             <p className="text-sm">
-              No active dispute.{" "}
-              <button onClick={() => navigate("/")} className="text-brand-400 underline font-medium">
-                Initiate a dispute call
+              No active dispute selected.{" "}
+              <button onClick={() => setViewScope("all")} className="text-brand-400 underline font-medium">
+                View all commitments
               </button>
             </p>
           </div>
@@ -810,13 +925,24 @@ export default function LedgerPage() {
         ) : (
           <div className="space-y-6">
             <div className="space-y-4">
-              {displayedPromises.map((p) => (
-                <PromiseCard key={p.id} promise={p} />
-              ))}
+              {displayedPromises.map((p) => {
+                const caseData = cases.find((c) => c.id === p.case_id);
+                return (
+                  <PromiseCard
+                    key={p.id}
+                    promise={p}
+                    caseData={caseData}
+                    onSelectCase={(c) => {
+                      setActiveCase(c);
+                      setViewScope("case");
+                    }}
+                  />
+                );
+              })}
             </div>
 
             {/* Source-Backed Statutory Escalation Guide */}
-            <EscalationGuide promises={promises} activeCase={activeCase} />
+            {activeCase && <EscalationGuide promises={promises} activeCase={activeCase} />}
           </div>
         )}
       </main>

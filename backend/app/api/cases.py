@@ -68,7 +68,7 @@ async def create_case(
 
 @router.get("", response_model=list[CaseRead])
 async def list_cases(
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(100, ge=1, le=200),
     current_user: Optional[User] = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db),
 ):

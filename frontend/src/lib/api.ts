@@ -86,7 +86,7 @@ export const authApi = {
 };
 
 export const casesApi = {
-  list: () => api.get<Case[]>("/cases").then((r) => r.data),
+  list: (limit = 100) => api.get<Case[]>(`/cases?limit=${limit}`).then((r) => r.data),
   create: (data: Parameters<typeof api.post>[1]) =>
     api.post<Case>("/cases", data).then((r) => r.data),
   get: (id: string) => api.get<Case>(`/cases/${id}`).then((r) => r.data),
