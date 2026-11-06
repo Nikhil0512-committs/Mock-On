@@ -31,6 +31,17 @@ const STATUS_ICON: Record<PromiseStatus, React.ComponentType<{ className?: strin
   unable_to_verify: HelpCircle,
 };
 
+function formatDateSafe(dateVal: any, fmt = "dd MMM yyyy", fallback = "Recent"): string {
+  if (!dateVal) return fallback;
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return fallback;
+    return format(d, fmt);
+  } catch {
+    return fallback;
+  }
+}
+
 export default function FamilyPage() {
   const { token } = useParams<{ token: string }>();
   const [data, setData] = useState<{
@@ -152,7 +163,7 @@ export default function FamilyPage() {
         <div className="flex items-center gap-4 text-xs text-white/40 pt-3 border-t border-white/[0.08]">
           <span className="flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5 text-white/30" />
-            Opened: {format(new Date(caseData.created_at as string), "dd MMM yyyy")}
+            Opened: {formatDateSafe(caseData.created_at, "dd MMM yyyy", "Recent")}
           </span>
           <span className="flex items-center gap-1.5 text-emerald-400/90 font-medium">
             <Lock className="w-3.5 h-3.5" /> Verbatim Voice Evidence Protected
@@ -208,7 +219,7 @@ export default function FamilyPage() {
                       <span className="text-white/50 text-xs">
                         Resolution Due:{" "}
                         <strong className="text-white/90">
-                          {format(new Date(p.due_at as string), "dd MMM yyyy")}
+                          {formatDateSafe(p.due_at, "dd MMM yyyy", "in 5 business days")}
                         </strong>
                       </span>
                     ) : (

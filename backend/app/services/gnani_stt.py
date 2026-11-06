@@ -117,6 +117,7 @@ class PrismaSTTAdapter:
         """REST API for short clips (for eval runs)."""
         import httpx
         headers = {
+            "x-api-key-id": self.api_key,
             "x-apikey-id": self.api_key,
             "language_code": self.language,
             "model": self.model,

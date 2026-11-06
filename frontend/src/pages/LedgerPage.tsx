@@ -51,6 +51,17 @@ const COMMITMENT_LABELS: Record<string, string> = {
   statement: "Statement",
 };
 
+function formatDateSafe(dateVal: any, fmt = "dd MMM yyyy", fallback = "Recent"): string {
+  if (!dateVal) return fallback;
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return fallback;
+    return format(d, fmt);
+  } catch {
+    return fallback;
+  }
+}
+
 function PromiseCard({ promise }: { promise: HPromise }) {
   const config = STATUS_CONFIG[promise.status] || STATUS_CONFIG.pending;
   const Icon = config.icon;
@@ -99,7 +110,7 @@ function PromiseCard({ promise }: { promise: HPromise }) {
             </div>
             <div className="text-white/40 text-xs">
               {promise.speaker_role.toUpperCase()} &bull;{" "}
-              {format(new Date(promise.created_at), "dd MMM yyyy HH:mm")}
+              {formatDateSafe(promise.created_at, "dd MMM yyyy HH:mm", "Recent")}
             </div>
           </div>
         </div>
@@ -150,7 +161,7 @@ function PromiseCard({ promise }: { promise: HPromise }) {
                   : "text-white"
               }`}
             >
-              {format(new Date(promise.due_at), "dd MMM yyyy")}
+              {formatDateSafe(promise.due_at, "dd MMM yyyy", "in 5 business days")}
             </div>
             {promise.raw_date_phrase && (
               <div className="text-white/30 text-xs italic">&ldquo;{promise.raw_date_phrase}&rdquo;</div>

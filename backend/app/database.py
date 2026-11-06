@@ -78,11 +78,13 @@ async def init_db() -> None:
         
         await conn.run_sync(Base.metadata.create_all)
 
-        # Migration helper for existing cases and users table
+        # Migration helper for existing cases, users, and promises tables
         if "postgresql" in engine.url.drivername:
             await conn.execute(text("ALTER TABLE cases ADD COLUMN IF NOT EXISTS user_id VARCHAR(36);"))
             await conn.execute(text("ALTER TABLE cases ADD COLUMN IF NOT EXISTS user_email VARCHAR(255);"))
             await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(30) DEFAULT 'consumer';"))
+            await conn.execute(text("ALTER TABLE promises ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';"))
+            await conn.execute(text("ALTER TABLE promise_events ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';"))
         elif "sqlite" in engine.url.drivername:
             try:
                 await conn.execute(text("ALTER TABLE cases ADD COLUMN user_id VARCHAR(36);"))
@@ -94,6 +96,14 @@ async def init_db() -> None:
                 pass
             try:
                 await conn.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(30) DEFAULT 'consumer';"))
+            except Exception:
+                pass
+            try:
+                await conn.execute(text("ALTER TABLE promises ADD COLUMN metadata JSON;"))
+            except Exception:
+                pass
+            try:
+                await conn.execute(text("ALTER TABLE promise_events ADD COLUMN metadata JSON;"))
             except Exception:
                 pass
 

@@ -20,6 +20,17 @@ import { format } from "date-fns";
 import { demoApi, promisesApi } from "../lib/api";
 import { useStore } from "../store";
 
+function formatDateSafe(dateVal: any, fmt = "dd MMM yyyy", fallback = "Live"): string {
+  if (!dateVal) return fallback;
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return fallback;
+    return format(d, fmt);
+  } catch {
+    return fallback;
+  }
+}
+
 export default function DemoPage() {
   const navigate = useNavigate();
   const { simulatedNow, setSimulatedNow, activeCase, setPromises } = useStore();
@@ -42,7 +53,7 @@ export default function DemoPage() {
     try {
       const r = await demoApi.advanceClock(daysToAdvance);
       setSimulatedNow(r.simulated_now);
-      addLog(`Clock advanced by ${daysToAdvance} day(s) → ${format(new Date(r.simulated_now), "dd MMM yyyy HH:mm")} IST`);
+      addLog(`Clock advanced by ${daysToAdvance} day(s) → ${formatDateSafe(r.simulated_now, "dd MMM yyyy HH:mm", "Now")} IST`);
       if (activeCase) {
         const updated = await promisesApi.listForCase(activeCase.id).catch(() => []);
         setPromises(updated);
@@ -98,7 +109,7 @@ export default function DemoPage() {
             </div>
             <div className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-brand-300 via-white to-emerald-300 font-mono tracking-tight">
               {simulatedNow
-                ? format(new Date(simulatedNow), "dd MMM yyyy · HH:mm:ss")
+                ? formatDateSafe(simulatedNow, "dd MMM yyyy · HH:mm:ss", "Real time (Live)")
                 : "Real time (Live)"}
             </div>
           </div>
