@@ -66,8 +66,8 @@ class Settings(BaseSettings):
     # Email (Gmail SMTP)
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 465
-    smtp_user: str = Field(default="")
-    smtp_password: str = Field(default="")
+    smtp_user: str = Field(default="nikhilsharma5122006@gmail.com")
+    smtp_password: str = Field(default="mkiyyzpoasxbyung")
     smtp_from: str = "Mock-On AI <nikhilsharma5122006@gmail.com>"
 
     # JWT Authentication

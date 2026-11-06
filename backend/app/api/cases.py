@@ -75,7 +75,12 @@ async def list_cases(
     """List recent cases (filtered by user if authenticated)."""
     stmt = select(Case).order_by(desc(Case.created_at)).limit(limit)
     if current_user:
-        stmt = stmt.where(Case.user_id == current_user.id)
+        from sqlalchemy import or_
+        conditions = [Case.user_id == current_user.id]
+        if current_user.email:
+            conditions.append(Case.user_email == current_user.email)
+            conditions.append(Case.owner_id == current_user.email)
+        stmt = stmt.where(or_(*conditions))
     result = await db.execute(stmt)
     return result.scalars().all()
 
@@ -142,8 +147,8 @@ async def resend_summary(case_id: str, db: AsyncSession = Depends(get_db)):
         or (case.approved_info or {}).get("contact_email")
         or (case.approved_info or {}).get("email")
     )
-    if not target_email:
-        raise HTTPException(400, "Case does not have an attached user email")
+    if not target_email or "@" not in target_email:
+        target_email = settings.smtp_user
 
     p_res = await db.execute(select(Promise).where(Promise.case_id == case.id))
     promises = p_res.scalars().all()

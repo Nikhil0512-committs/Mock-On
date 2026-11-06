@@ -282,7 +282,6 @@ class EmailService:
         </html>
         """
         return await self._send(to_email, subject, html_body)
-        return await self._send(to_email, subject, html_body)
 
     async def send_deadline_checkin(
         self,

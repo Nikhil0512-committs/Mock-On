@@ -1,16 +1,43 @@
 """Promises API — GET /promises, POST /promises/{id}/confirm"""
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import Promise, PromiseEvent
+from app.models import Promise, PromiseEvent, Case, User
 from app.schemas.promise import PromiseRead, PromiseConfirm, PromiseEventRead
+from app.services.auth import get_optional_current_user
 from app.services.ledger import ledger
 
 router = APIRouter(prefix="/promises", tags=["promises"])
+
+
+@router.get("", response_model=list[PromiseRead])
+async def list_all_promises(
+    current_user: Optional[User] = Depends(get_optional_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all confirmed or recorded promises (filtered by user if authenticated)."""
+    if current_user:
+        stmt = (
+            select(Promise)
+            .join(Case, Promise.case_id == Case.id)
+            .where(
+                or_(
+                    Case.user_id == current_user.id,
+                    Case.user_email == current_user.email,
+                    Case.owner_id == current_user.email,
+                )
+            )
+            .order_by(Promise.created_at.desc())
+        )
+    else:
+        stmt = select(Promise).order_by(Promise.created_at.desc()).limit(100)
+    res = await db.execute(stmt)
+    return res.scalars().all()
 
 
 @router.get("/case/{case_id}", response_model=list[PromiseRead])

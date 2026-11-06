@@ -24,6 +24,15 @@ import {
   Shield,
   FileDown,
   Volume2,
+  Phone,
+  CreditCard,
+  ShoppingCart,
+  Plane,
+  Zap,
+  Building2,
+  Plus,
+  FolderArchive,
+  ArrowRight,
 } from "lucide-react";
 import { format } from "date-fns";
 import { promisesApi, casesApi } from "../lib/api";
@@ -184,9 +193,140 @@ function PromiseCard({ promise }: { promise: HPromise }) {
   );
 }
 
+const VALID_DOMAIN_KEYS = [
+  "telecom",
+  "banking",
+  "ecommerce",
+  "travel",
+  "insurance",
+  "utilities",
+  "edtech",
+  "mobility",
+  "housing",
+];
+
+function getDomainKey(caseData: Case): string {
+  const info = (caseData.approved_info as Record<string, unknown>) || {};
+  if (info.domain && typeof info.domain === "string") {
+    const d = info.domain.toLowerCase();
+    if (VALID_DOMAIN_KEYS.includes(d)) return d;
+  }
+  const text = `${info.service_provider || ""} ${caseData.goal || ""}`.toLowerCase();
+  if (
+    text.includes("amazon") ||
+    text.includes("flipkart") ||
+    text.includes("order") ||
+    text.includes("delivery") ||
+    text.includes("return") ||
+    text.includes("ecommerce")
+  )
+    return "ecommerce";
+  if (
+    text.includes("bank") ||
+    text.includes("hdfc") ||
+    text.includes("sbi") ||
+    text.includes("upi") ||
+    text.includes("card")
+  )
+    return "banking";
+  if (
+    text.includes("flight") ||
+    text.includes("indigo") ||
+    text.includes("airline") ||
+    text.includes("pnr") ||
+    text.includes("ticket")
+  )
+    return "travel";
+  if (
+    text.includes("insurance") ||
+    text.includes("policy") ||
+    text.includes("claim") ||
+    text.includes("health")
+  )
+    return "insurance";
+  if (
+    text.includes("airtel") ||
+    text.includes("jio") ||
+    text.includes("telecom") ||
+    text.includes("bill") ||
+    text.includes("sim")
+  )
+    return "telecom";
+  return "utilities";
+}
+
+const DOMAIN_SECTIONS: Record<
+  string,
+  {
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    color: string;
+    badge: string;
+    border: string;
+  }
+> = {
+  telecom: {
+    label: "Telecom",
+    icon: Phone,
+    color: "text-rose-400",
+    badge: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+    border: "border-rose-500/30 hover:border-rose-500/60",
+  },
+  banking: {
+    label: "Banking & UPI",
+    icon: CreditCard,
+    color: "text-blue-400",
+    badge: "bg-blue-500/15 text-blue-300 border-blue-500/30",
+    border: "border-blue-500/30 hover:border-blue-500/60",
+  },
+  ecommerce: {
+    label: "E-Commerce",
+    icon: ShoppingCart,
+    color: "text-amber-400",
+    badge: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+    border: "border-amber-500/30 hover:border-amber-500/60",
+  },
+  travel: {
+    label: "Airlines & Travel",
+    icon: Plane,
+    color: "text-sky-400",
+    badge: "bg-sky-500/15 text-sky-300 border-sky-500/30",
+    border: "border-sky-500/30 hover:border-sky-500/60",
+  },
+  insurance: {
+    label: "Insurance",
+    icon: Shield,
+    color: "text-emerald-400",
+    badge: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+    border: "border-emerald-500/30 hover:border-emerald-500/60",
+  },
+  utilities: {
+    label: "Utilities & Power",
+    icon: Zap,
+    color: "text-yellow-400",
+    badge: "bg-yellow-500/15 text-yellow-300 border-yellow-500/30",
+    border: "border-yellow-500/30 hover:border-yellow-500/60",
+  },
+};
+
+function getDomainMeta(domainKey: string) {
+  return (
+    DOMAIN_SECTIONS[domainKey] || {
+      label: domainKey.charAt(0).toUpperCase() + domainKey.slice(1),
+      icon: Building2,
+      color: "text-brand-400",
+      badge: "bg-brand-500/15 text-brand-300 border-brand-500/30",
+      border: "border-brand-500/30 hover:border-brand-500/60",
+    }
+  );
+}
+
 export default function LedgerPage() {
   const navigate = useNavigate();
   const { activeCase, setActiveCase, promises, setPromises } = useStore();
+  const [cases, setCases] = useState<Case[]>([]);
+  const [loadingCases, setLoadingCases] = useState(true);
+  const [selectedDomain, setSelectedDomain] = useState<string>("all");
   const [familyModalOpen, setFamilyModalOpen] = useState(false);
   const [resendingEmail, setResendingEmail] = useState(false);
   const [resendStatus, setResendStatus] = useState<string | null>(null);
@@ -210,19 +350,26 @@ export default function LedgerPage() {
     }
   };
 
-  // Auto-load most recent case if activeCase is not set in store
-  useEffect(() => {
-    if (!activeCase) {
-      casesApi
-        .list()
-        .then((cases) => {
-          if (cases && cases.length > 0) {
-            setActiveCase(cases[0]);
-          }
-        })
-        .catch(() => {});
+  const loadCases = async () => {
+    setLoadingCases(true);
+    try {
+      const list = await casesApi.list();
+      setCases(list || []);
+      if (list && list.length > 0) {
+        if (!activeCase || !list.some((c) => c.id === activeCase.id)) {
+          setActiveCase(list[0]);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load cases:", e);
+    } finally {
+      setLoadingCases(false);
     }
-  }, [activeCase, setActiveCase]);
+  };
+
+  useEffect(() => {
+    loadCases();
+  }, []);
 
   const loadPromises = async () => {
     if (!activeCase) return;
@@ -231,8 +378,14 @@ export default function LedgerPage() {
   };
 
   useEffect(() => {
-    loadPromises();
-  }, [activeCase]);
+    if (activeCase?.id) {
+      loadPromises();
+    }
+  }, [activeCase?.id]);
+
+  const handleRefresh = async () => {
+    await Promise.all([loadCases(), loadPromises()]);
+  };
 
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const statuses = ["pending", "due_soon", "overdue", "fulfilled", "unable_to_verify"] as const;
@@ -242,32 +395,221 @@ export default function LedgerPage() {
       ? promises
       : promises.filter((p) => p.status === selectedStatus);
 
+  // Distinct domain keys that actually have cases
+  const presentDomainKeys = Array.from(new Set(cases.map((c) => getDomainKey(c))));
+
+  // Filtered cases based on domain tab
+  const sectionsToRender =
+    selectedDomain === "all"
+      ? presentDomainKeys
+      : presentDomainKeys.filter((d) => d === selectedDomain);
+
   return (
     <div className="min-h-screen py-8 px-4 sm:px-6 lg:px-8">
-      <main className="max-w-4xl mx-auto space-y-6">
+      <main className="max-w-4xl mx-auto space-y-8">
         {/* Clean Page Title Header (Zero duplication with navbar) */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/[0.08]">
           <div>
             <div className="flex items-center gap-2.5">
               <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Promise Ledger</h1>
               <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-brand-500/15 text-brand-300 border border-brand-500/30">
-                {promises.length} promises recorded
+                {cases.length} disputes recorded
+              </span>
+              <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                {promises.length} promises tracked
               </span>
             </div>
             <p className="text-xs sm:text-sm text-white/50 mt-1">
-              Tamper-evident record of verbal helpline commitments, audio evidence, and statutory deadlines.
+              Tamper-evident record of verbal helpline commitments, audio evidence, and statutory deadlines categorized by dispute domain.
             </p>
           </div>
           <div className="flex items-center gap-2 self-start sm:self-auto">
             <button
-              onClick={loadPromises}
+              onClick={handleRefresh}
               className="btn-ghost text-xs py-1.5 px-3 flex items-center gap-1.5 text-white/70 hover:text-white"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Refresh</span>
             </button>
+            <button
+              onClick={() => navigate("/intake")}
+              className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>New Dispute</span>
+            </button>
           </div>
         </div>
+
+        {/* ── SECTION 1: ALL DISPUTES CATEGORIZED BY THEIR RESPECTIVE DOMAINS ── */}
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <FolderArchive className="w-5 h-5 text-brand-400" />
+              <h2 className="text-sm sm:text-base font-bold text-white tracking-tight">
+                Disputes by Domain Section
+              </h2>
+              <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-white/[0.08] text-white/70">
+                {cases.length} Active
+              </span>
+            </div>
+            <span className="text-xs text-white/40">
+              Select any dispute below to view its verbal commitments, evidence pack &amp; statutory appeal.
+            </span>
+          </div>
+
+          {/* Domain Filter Pills */}
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06] overflow-x-auto">
+            <button
+              onClick={() => setSelectedDomain("all")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-2 whitespace-nowrap ${
+                selectedDomain === "all"
+                  ? "bg-white/[0.12] text-white shadow-sm border border-white/[0.08]"
+                  : "text-white/50 hover:text-white"
+              }`}
+            >
+              <span>All Sections</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/[0.08] text-white/80 font-mono">
+                {cases.length}
+              </span>
+            </button>
+
+            {presentDomainKeys.map((dKey) => {
+              const meta = getDomainMeta(dKey);
+              const Icon = meta.icon;
+              const count = cases.filter((c) => getDomainKey(c) === dKey).length;
+              const isSelected = selectedDomain === dKey;
+
+              return (
+                <button
+                  key={dKey}
+                  onClick={() => setSelectedDomain(dKey)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-2 whitespace-nowrap ${
+                    isSelected
+                      ? "bg-white/[0.12] text-white shadow-sm border border-white/[0.08]"
+                      : "text-white/50 hover:text-white"
+                  }`}
+                >
+                  <Icon className={`w-3.5 h-3.5 ${meta.color}`} />
+                  <span>{meta.label}</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/[0.08] text-white/80 font-mono">
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Sectional Disputes Grid */}
+          {loadingCases ? (
+            <div className="p-8 rounded-2xl bg-white/[0.02] border border-white/[0.08] text-center space-y-2">
+              <RefreshCw className="w-6 h-6 animate-spin text-brand-400 mx-auto" />
+              <p className="text-xs text-white/50">Loading your dispute dossiers...</p>
+            </div>
+          ) : cases.length === 0 ? (
+            <div className="p-8 rounded-2xl bg-white/[0.02] border border-white/[0.08] text-center space-y-3">
+              <FolderArchive className="w-10 h-10 mx-auto text-white/20" />
+              <p className="text-sm font-semibold text-white/80">No Disputes Recorded Yet</p>
+              <p className="text-xs text-white/50 max-w-sm mx-auto">
+                File a grievance for Telecom, Banking, E-Commerce, or Travel to start an autonomous advocacy call.
+              </p>
+              <button
+                onClick={() => navigate("/intake")}
+                className="btn-primary text-xs py-2 px-4 inline-flex items-center gap-1.5 mt-2"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Launch New Dispute Call</span>
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {sectionsToRender.map((dKey) => {
+                const meta = getDomainMeta(dKey);
+                const Icon = meta.icon;
+                const sectionCases = cases.filter((c) => getDomainKey(c) === dKey);
+                if (sectionCases.length === 0) return null;
+
+                return (
+                  <div key={dKey} className="space-y-3">
+                    <div className="flex items-center gap-2 px-1">
+                      <Icon className={`w-4 h-4 ${meta.color}`} />
+                      <h3 className="text-xs font-bold text-white/80 uppercase tracking-wider">
+                        {meta.label} Section ({sectionCases.length})
+                      </h3>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {sectionCases.map((c) => {
+                        const info = (c.approved_info as Record<string, any>) || {};
+                        const provider = info.service_provider || "Customer Support";
+                        const amt = info.disputed_amount || "0";
+                        const ticket = info.ticket_number || `TKT-${c.id.slice(0, 8).toUpperCase()}`;
+                        const identifier = info.identifier_value || info.phone_number || "Reference";
+                        const isSelected = activeCase?.id === c.id;
+
+                        return (
+                          <div
+                            key={c.id}
+                            onClick={() => setActiveCase(c)}
+                            className={`p-4 rounded-2xl cursor-pointer transition-all duration-200 border relative overflow-hidden flex flex-col justify-between gap-3 ${
+                              isSelected
+                                ? "bg-[#11192e] border-brand-500 shadow-lg shadow-brand-500/10 ring-1 ring-brand-500/50"
+                                : "bg-white/[0.03] border-white/[0.08] hover:bg-white/[0.05] hover:border-white/[0.15]"
+                            }`}
+                          >
+                            <div className="space-y-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${meta.badge}`}>
+                                  {meta.label}
+                                </span>
+                                <span className="text-xs font-mono font-bold text-emerald-400">
+                                  ₹{amt}
+                                </span>
+                              </div>
+
+                              <div>
+                                <h4 className="text-sm font-bold text-white tracking-tight flex items-center gap-1.5">
+                                  <span>{provider}</span>
+                                </h4>
+                                <div className="text-[11px] font-mono text-white/40 mt-0.5">
+                                  #{ticket} &bull; {identifier}
+                                </div>
+                              </div>
+
+                              <p className="text-xs text-white/60 line-clamp-2 italic leading-relaxed">
+                                "{c.goal}"
+                              </p>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-2 border-t border-white/[0.06] text-[11px]">
+                              <span className="text-white/40">
+                                {formatDateSafe(c.created_at, "dd MMM yyyy", "Recent")}
+                              </span>
+
+                              {isSelected ? (
+                                <span className="text-xs font-bold text-brand-300 flex items-center gap-1">
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>Active Dossier</span>
+                                </span>
+                              ) : (
+                                <span className="text-white/50 hover:text-white flex items-center gap-1">
+                                  <span>Select</span>
+                                  <ArrowRight className="w-3 h-3" />
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* ── SECTION 2: ACTIVE DISPUTE DOSSIER DETAILS & EVIDENCE ── */}
 
         {/* Synced Executive Call & Dispute Summary */}
         {activeCase && (() => {
@@ -1028,56 +1370,6 @@ Tenant / Complainant`,
     note: "Tenants are protected against arbitrary deposit deductions under the Model Tenancy Act 2021.",
   },
 };
-
-function getDomainKey(caseData: Case): string {
-  const info = (caseData.approved_info as Record<string, unknown>) || {};
-  if (info.domain && typeof info.domain === "string") {
-    const d = info.domain.toLowerCase();
-    if (d in ESCALATION_DATA) return d;
-  }
-  const text = `${info.service_provider || ""} ${caseData.goal || ""}`.toLowerCase();
-  if (
-    text.includes("amazon") ||
-    text.includes("flipkart") ||
-    text.includes("order") ||
-    text.includes("delivery") ||
-    text.includes("return") ||
-    text.includes("ecommerce")
-  )
-    return "ecommerce";
-  if (
-    text.includes("bank") ||
-    text.includes("hdfc") ||
-    text.includes("sbi") ||
-    text.includes("upi") ||
-    text.includes("card")
-  )
-    return "banking";
-  if (
-    text.includes("flight") ||
-    text.includes("indigo") ||
-    text.includes("airline") ||
-    text.includes("pnr") ||
-    text.includes("ticket")
-  )
-    return "travel";
-  if (
-    text.includes("insurance") ||
-    text.includes("policy") ||
-    text.includes("claim") ||
-    text.includes("health")
-  )
-    return "insurance";
-  if (
-    text.includes("airtel") ||
-    text.includes("jio") ||
-    text.includes("telecom") ||
-    text.includes("bill") ||
-    text.includes("sim")
-  )
-    return "telecom";
-  return "utilities";
-}
 
 function EscalationGuide({
   promises,

@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db, AsyncSessionLocal
 from app.models import Call, Case, Utterance, Promise
 from app.schemas.call import CallCreate, CallRead

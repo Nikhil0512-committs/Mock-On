@@ -153,6 +153,7 @@ export const callsApi = {
 };
 
 export const promisesApi = {
+  listAll: () => api.get<HPromise[]>("/promises").then((r) => r.data),
   listForCase: (caseId: string) =>
     api.get<HPromise[]>(`/promises/case/${caseId}`).then((r) => r.data),
   get: (id: string) => api.get<HPromise>(`/promises/${id}`).then((r) => r.data),
