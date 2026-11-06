@@ -408,7 +408,7 @@ export default function IntakePage() {
   const [supportNumber, setSupportNumber] = useState("");
   const [userCustomizedHelpline, setUserCustomizedHelpline] = useState(false);
   const [isScraping, setIsScraping] = useState(false);
-  const [phoneNumber, setPhoneNumber] = useState("+91 91030 31412");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [amount, setAmount] = useState("");
   const [goal, setGoal] = useState("");
   const [previousGoal, setPreviousGoal] = useState<string | null>(null);
@@ -416,7 +416,7 @@ export default function IntakePage() {
   const [statutoryCitations, setStatutoryCitations] = useState<string[]>([]);
   const [legalBasis, setLegalBasis] = useState<string | null>(null);
   const [language, setLanguage] = useState("hi-en");
-  const [email, setEmail] = useState("nikhilsharma5122006@gmail.com");
+  const [email, setEmail] = useState("");
   const [consent, setConsent] = useState(true);
   const [infoConsent, setInfoConsent] = useState(true);
   const [biometricConsent, setBiometricConsent] = useState(true);
@@ -510,10 +510,6 @@ export default function IntakePage() {
   };
 
   const handleStart = async () => {
-    if (!email.trim()) {
-      setError("Please enter an email address to receive call summaries & check-ins.");
-      return;
-    }
     if (!consent) {
       setError("Please provide follow-up consent to continue.");
       return;
@@ -534,15 +530,17 @@ export default function IntakePage() {
     const effectiveProvider = provider.trim() || selectedDomain.defaultProvider;
     const effectiveSupportNumber = supportNumber.trim() || scrapedHelpline.number;
     const effectiveAmount = amount.trim() || selectedDomain.defaultAmount;
-    const effectiveIdentifier = identifierValue.trim() || phoneNumber.trim() || selectedDomain.defaultIdentifier;
+    const effectivePhone = phoneNumber.trim() || "+91 91030 31412";
+    const effectiveEmail = email.trim() || currentUser?.email || "nikhilsharma5122006@gmail.com";
+    const effectiveIdentifier = identifierValue.trim() || effectivePhone || selectedDomain.defaultIdentifier;
     const effectiveGoal = goal.trim() || selectedDomain.defaultGoal;
 
     try {
       // 1. Create case with full domain context
       const case_ = await casesApi.create({
-        owner_id: currentUser?.email || email.trim(),
+        owner_id: currentUser?.email || effectiveEmail,
         user_id: currentUser?.id,
-        user_email: email.trim(),
+        user_email: effectiveEmail,
         language,
         goal: effectiveGoal,
         approved_info: {
@@ -553,7 +551,7 @@ export default function IntakePage() {
           support_number: effectiveSupportNumber,
           identifier_type: selectedDomain.identifierLabel,
           identifier_value: effectiveIdentifier,
-          phone_number: phoneNumber.trim(),
+          phone_number: effectivePhone,
           disputed_amount: effectiveAmount,
           ticket_number: generatedTicket,
           info_sharing: infoConsent,
@@ -776,10 +774,9 @@ export default function IntakePage() {
                 </label>
                 <input
                   type="email"
-                  required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="your.email@gmail.com"
+                  placeholder="nikhilsharma5122006@gmail.com"
                   className="input text-xs sm:text-sm py-2.5 bg-black/30 border-white/[0.08] focus:border-indigo-500/60 rounded-xl"
                 />
               </div>
