@@ -89,14 +89,14 @@ export default function LegalNoticeModal({
         <div className="h-1.5 w-full bg-gradient-to-r from-red-500 via-amber-500 to-indigo-500" />
 
         {/* Modal Header */}
-        <div className="p-5 sm:p-6 pb-4 border-b border-white/[0.08] flex items-start justify-between gap-3">
+        <div className="p-4 sm:p-6 pb-3 sm:pb-4 border-b border-white/[0.08] flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400">
-              <Scale className="w-5 h-5" />
+            <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-2xl bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400 flex-shrink-0">
+              <Scale className="w-4 sm:w-5 h-4 sm:h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-white tracking-tight">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
                   Statutory Grievance Dossier &amp; Legal Notice
                 </h2>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/30">

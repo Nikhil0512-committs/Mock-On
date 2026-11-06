@@ -111,10 +111,10 @@ export default function MyDisputesDrawer({ isOpen, onClose }: MyDisputesDrawerPr
         className="absolute inset-0 bg-black/80 backdrop-blur-md transition-opacity"
       />
 
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
+      <div className="fixed inset-y-0 right-0 max-w-full flex pl-0 sm:pl-10">
         <div className="w-screen max-w-xl bg-surface/95 backdrop-blur-2xl border-l border-white/[0.09] shadow-2xl flex flex-col animate-slide-up">
           {/* Header */}
-          <div className="p-6 border-b border-white/[0.08] flex items-center justify-between flex-shrink-0 bg-surface-card/60">
+          <div className="p-4 sm:p-6 border-b border-white/[0.08] flex items-center justify-between flex-shrink-0 bg-surface-card/60">
             <div className="flex items-center gap-3.5">
               <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-brand-600 via-indigo-600 to-slate-900 border border-white/20 flex items-center justify-center shadow-lg shadow-brand-500/20 flex-shrink-0">
                 <FolderOpen className="w-5 h-5 text-white" />

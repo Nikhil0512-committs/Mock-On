@@ -623,19 +623,19 @@ export default function SwitchboardPage() {
   const ringingCalls = pendingCalls.filter((p) => p.call.status === "ringing");
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 animate-fade-in">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-5 sm:space-y-6 animate-fade-in">
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-3xl bg-[#0e1628]/90 border border-white/[0.1] shadow-2xl relative overflow-hidden">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 sm:p-5 rounded-3xl bg-[#0e1628]/90 border border-white/[0.1] shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-rose-500 via-amber-500 to-brand-500" />
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-600 to-amber-600 p-0.5 shadow-lg shadow-rose-500/20 flex-shrink-0">
+          <div className="w-11 sm:w-12 h-11 sm:h-12 rounded-2xl bg-gradient-to-br from-rose-600 to-amber-600 p-0.5 shadow-lg shadow-rose-500/20 flex-shrink-0">
             <div className="w-full h-full bg-[#0e1628] rounded-[14px] flex items-center justify-center">
-              <Headphones className="w-6 h-6 text-rose-400" />
+              <Headphones className="w-5 sm:w-6 h-5 sm:h-6 text-rose-400" />
             </div>
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-white tracking-tight">
+              <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight">
                 Company Support Desk Switchboard
               </h1>
               <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
@@ -662,7 +662,7 @@ export default function SwitchboardPage() {
       {/* Main Grid: Left = Call Queue, Right = Active Call Interface */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column (5 Cols): Incoming / Ringing Queue */}
-        <div className="lg:col-span-5 space-y-4">
+        <div className="lg:col-span-5 space-y-4 order-2 lg:order-1">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold uppercase tracking-wider text-white/80 flex items-center gap-2">
               <PhoneForwarded className="w-4 h-4 text-rose-400" />
@@ -779,11 +779,11 @@ export default function SwitchboardPage() {
         </div>
 
         {/* Right Column (7 Cols): Live Support Desk Console */}
-        <div className="lg:col-span-7 space-y-4">
+        <div className="lg:col-span-7 space-y-4 order-1 lg:order-2">
           {activeCallItem ? (
-            <div className="rounded-3xl bg-[#0b1222] border border-white/[0.12] shadow-2xl flex flex-col h-[650px] overflow-hidden">
+            <div className="rounded-3xl bg-[#0b1222] border border-white/[0.12] shadow-2xl flex flex-col h-[580px] sm:h-[650px] overflow-hidden">
               {/* Active Call Header */}
-              <div className="p-4 border-b border-white/[0.08] bg-[#0e1628] flex items-center justify-between">
+              <div className="p-3.5 sm:p-4 border-b border-white/[0.08] bg-[#0e1628] flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-3">
                   <div className="relative">
                     <div className="w-3 h-3 rounded-full bg-emerald-400 animate-ping" />

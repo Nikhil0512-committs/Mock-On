@@ -501,21 +501,21 @@ export default function LedgerPage() {
       : presentDomainKeys.filter((d) => d === selectedDomain);
 
   return (
-    <div className="min-h-screen py-8 px-4 sm:px-6 lg:px-8">
-      <main className="max-w-4xl mx-auto space-y-8">
-        {/* Clean Page Title Header (Zero duplication with navbar) */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/[0.08]">
+    <div className="min-h-screen py-5 sm:py-8 px-3 sm:px-6 lg:px-8">
+      <main className="max-w-4xl mx-auto space-y-6 sm:space-y-8">
+        {/* Clean Page Title Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/[0.08]">
           <div>
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Promise Ledger</h1>
-              <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-brand-500/15 text-brand-300 border border-brand-500/30">
-                {cases.length} disputes recorded
+              <span className="text-[11px] sm:text-xs px-2 py-0.5 rounded-full font-semibold bg-brand-500/15 text-brand-300 border border-brand-500/30">
+                {cases.length} disputes
               </span>
-              <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                {allPromises.length > 0 ? allPromises.length : promises.length} commitments tracked
+              <span className="text-[11px] sm:text-xs px-2 py-0.5 rounded-full font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                {allPromises.length > 0 ? allPromises.length : promises.length} commitments
               </span>
             </div>
-            <p className="text-xs sm:text-sm text-white/50 mt-1">
+            <p className="text-xs sm:text-sm text-white/50 mt-1 leading-relaxed">
               Tamper-evident record of verbal helpline commitments, audio evidence, and statutory deadlines categorized by dispute domain.
             </p>
           </div>

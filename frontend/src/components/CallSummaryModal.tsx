@@ -344,8 +344,8 @@ export default function CallSummaryModal({
         </div>
 
         {/* Action Buttons Footer */}
-        <div className="p-5 sm:px-8 border-t border-white/[0.08] bg-[#090e1b] flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+        <div className="p-4 sm:p-5 sm:px-8 border-t border-white/[0.08] bg-[#090e1b] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
             {!isResolved && (
               <button
                 onClick={() => {
@@ -412,7 +412,7 @@ export default function CallSummaryModal({
               onClose();
               navigate("/ledger");
             }}
-            className="btn-primary text-xs py-2.5 px-4.5 flex items-center gap-2 shadow-lg shadow-brand-500/25 rounded-xl"
+            className="btn-primary text-xs py-2.5 px-4 flex items-center justify-center gap-2 shadow-lg shadow-brand-500/25 rounded-xl w-full sm:w-auto flex-shrink-0"
           >
             Review in Promise Ledger
             <ArrowRight className="w-3.5 h-3.5" />

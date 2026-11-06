@@ -219,14 +219,14 @@ export default function AudioWaveformVisualizer({
 
       <div className="relative z-10 space-y-2">
         {/* Top Control & Telemetry Row */}
-        <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center justify-between gap-2 text-xs">
           {/* Active Audio State Badge */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <span
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border transition-all duration-300 ${theme.badgeBg}`}
+              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[10px] sm:text-[11px] font-bold border transition-all duration-300 max-w-[200px] sm:max-w-none truncate ${theme.badgeBg}`}
             >
-              <span className={`w-2 h-2 rounded-full ${theme.dotColor}`} />
-              <span className="tracking-wide uppercase">{theme.label}</span>
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${theme.dotColor}`} />
+              <span className="tracking-wide uppercase truncate">{theme.label}</span>
             </span>
 
             {helplineNumber && (

@@ -69,18 +69,18 @@ export default function DemoPage() {
   };
 
   return (
-    <div className="min-h-screen max-w-4xl mx-auto px-6 py-10">
+    <div className="min-h-screen max-w-4xl mx-auto px-3.5 sm:px-6 py-5 sm:py-10">
       {/* Top Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6 sm:mb-8">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <button
             onClick={() => navigate("/ledger")}
             className="btn-ghost text-xs py-2 px-3 flex items-center gap-1.5 border border-white/10 hover:border-white/20 rounded-xl"
           >
             <ArrowLeft className="w-3.5 h-3.5" /> Return to Ledger
           </button>
-          <div className="h-4 w-px bg-white/10" />
-          <h1 className="font-extrabold text-2xl text-white tracking-tight">Demo Flight Deck</h1>
+          <div className="h-4 w-px bg-white/10 hidden sm:block" />
+          <h1 className="font-extrabold text-xl sm:text-2xl text-white tracking-tight">Demo Flight Deck</h1>
           <span className="badge bg-amber-500/15 text-amber-300 border-amber-500/30 text-xs font-semibold">
             <Sparkles className="w-3 h-3" />
             Simulated Clock
@@ -90,26 +90,26 @@ export default function DemoPage() {
 
       <div className="grid gap-6">
         {/* Simulated Clock Card */}
-        <div className="relative overflow-hidden rounded-3xl bg-[#0d1527]/90 border border-white/[0.12] p-7 shadow-2xl backdrop-blur-xl">
+        <div className="relative overflow-hidden rounded-3xl bg-[#0d1527]/90 border border-white/[0.12] p-4 sm:p-7 shadow-2xl backdrop-blur-xl">
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brand-500 via-indigo-500 to-amber-400" />
           
-          <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center justify-between mb-4 sm:mb-5">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-brand-500/15 border border-brand-500/30 flex items-center justify-center">
+              <div className="w-9 h-9 rounded-xl bg-brand-500/15 border border-brand-500/30 flex items-center justify-center flex-shrink-0">
                 <Clock className="w-5 h-5 text-brand-400" />
               </div>
               <div>
-                <h2 className="font-bold text-white text-lg tracking-tight">Simulated Deadline Clock</h2>
+                <h2 className="font-bold text-white text-base sm:text-lg tracking-tight">Simulated Deadline Clock</h2>
                 <p className="text-xs text-white/50">Fast-forward time to trigger SLA reminders & check-ins</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-black/40 border border-white/[0.08] rounded-2xl p-5 mb-5 font-mono shadow-inner">
-            <div className="text-white/40 text-xs uppercase tracking-wider mb-1.5 font-sans font-medium">
+          <div className="bg-black/40 border border-white/[0.08] rounded-2xl p-4 sm:p-5 mb-5 font-mono shadow-inner">
+            <div className="text-white/40 text-[11px] sm:text-xs uppercase tracking-wider mb-1.5 font-sans font-medium">
               Current Simulated Time (IST)
             </div>
-            <div className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-brand-300 via-white to-emerald-300 font-mono tracking-tight">
+            <div className="text-xl sm:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-brand-300 via-white to-emerald-300 font-mono tracking-tight break-all">
               {simulatedNow
                 ? formatDateSafe(simulatedNow, "dd MMM yyyy · HH:mm:ss", "Real time (Live)")
                 : "Real time (Live)"}

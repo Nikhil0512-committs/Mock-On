@@ -31,6 +31,7 @@ import {
   Zap,
   Brain,
   Fingerprint,
+  MessageSquare,
 } from "lucide-react";
 import { useStore } from "../store";
 import { useCallWebSocket } from "../hooks/useCallWebSocket";
@@ -82,6 +83,7 @@ export default function CallPage() {
   const transcriptRef = useRef<HTMLDivElement>(null);
   const [familyModalOpen, setFamilyModalOpen] = useState(false);
   const [summaryModalOpen, setSummaryModalOpen] = useState(false);
+  const [mobileTab, setMobileTab] = useState<"transcript" | "radar">("transcript");
   const [userMessageInput, setUserMessageInput] = useState("");
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
@@ -191,6 +193,7 @@ export default function CallPage() {
     pendingProposals,
     removeProposal,
     setActiveTab,
+    promises,
     setPromises,
     isAudioMuted,
     setIsAudioMuted,
@@ -405,11 +408,11 @@ export default function CallPage() {
   const sla = getSlaDetails();
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] overflow-hidden">
+    <div className="flex flex-col h-[calc(100vh-8.5rem)] md:h-[calc(100vh-4rem)] max-h-[calc(100vh-8.5rem)] md:max-h-[calc(100vh-4rem)] overflow-hidden">
       {/* Top Bar Navigation */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-white/[0.08] bg-[#090e1b]/90 backdrop-blur-xl flex-shrink-0 shadow-lg">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08]">
+      <header className="flex items-center justify-between px-3 sm:px-6 py-2.5 sm:py-3 border-b border-white/[0.08] bg-[#090e1b]/90 backdrop-blur-xl flex-shrink-0 shadow-lg">
+        <div className="flex items-center gap-2 sm:gap-3 overflow-hidden">
+          <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] flex-shrink-0">
             <div className="relative">
               <div
                 className={`w-2.5 h-2.5 rounded-full ${
@@ -428,18 +431,18 @@ export default function CallPage() {
             </div>
             <span className={`text-xs font-bold tracking-wide uppercase ${statusColour}`}>
               {callStatus === "active"
-                ? "Live Telephony Stream"
+                ? "Live Stream"
                 : callStatus === "ringing"
-                ? "Ringing Support Desk…"
+                ? "Ringing…"
                 : callStatus === "ended"
-                ? "Call Concluded"
+                ? "Concluded"
                 : callStatus === "initialising"
-                ? "Dialing Helpline…"
-                : "Idle Session"}
+                ? "Dialing…"
+                : "Idle"}
             </span>
 
             {callStatus === "active" && (
-              <div className="flex items-center gap-[2.5px] h-3 ml-1.5 pl-2 border-l border-white/10">
+              <div className="flex items-center gap-[2.5px] h-3 ml-1.5 pl-2 border-l border-white/10 hidden sm:flex">
                 <span className="w-[2px] bg-emerald-400 rounded-full animate-wave-1 h-full" />
                 <span className="w-[2px] bg-emerald-400 rounded-full animate-wave-2 h-full" />
                 <span className="w-[2px] bg-emerald-400 rounded-full animate-wave-3 h-full" />
@@ -448,13 +451,20 @@ export default function CallPage() {
             )}
           </div>
 
+          <div className="flex items-center gap-1.5 sm:gap-2 truncate">
+            <span className="font-bold text-xs sm:text-sm text-white truncate">{provider}</span>
+            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 flex-shrink-0">
+              ₹{disputedAmount}
+            </span>
+          </div>
+
           {activeCase && (
             <>
-              <span className="text-white/40 text-xs font-mono hidden sm:inline px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.06]">
-                Case #{activeCase.id.slice(0, 8)}
+              <span className="text-white/40 text-xs font-mono hidden md:inline px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                #{activeCase.id.slice(0, 8)}
               </span>
               {Boolean((caseInfo.helpline_number as string) || (caseInfo.support_number as string)) && (
-                <span className="text-amber-300 text-xs font-mono hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                <span className="text-amber-300 text-xs font-mono hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20">
                   <Phone className="w-3 h-3 text-amber-400" />
                   Dialing: {(caseInfo.helpline_number as string) || (caseInfo.support_number as string)}
                 </span>
@@ -468,7 +478,7 @@ export default function CallPage() {
                   <span>armour365™ Proxy</span>
                 </span>
               )}
-              <span className="text-brand-300 text-[11px] font-medium hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-brand-500/10 border border-brand-500/20">
+              <span className="text-brand-300 text-[11px] font-medium hidden 2xl:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-brand-500/10 border border-brand-500/20">
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
                 <span>
                   Voice: Shivani &bull;{" "}
@@ -487,11 +497,11 @@ export default function CallPage() {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
           {/* Audio Mute/Unmute */}
           <button
             onClick={() => setIsAudioMuted(!isAudioMuted)}
-            className={`btn-ghost text-xs py-1.5 px-3 flex items-center gap-1.5 rounded-xl transition-all ${
+            className={`btn-ghost text-xs py-1.5 px-2.5 sm:px-3 flex items-center gap-1.5 rounded-xl transition-all ${
               isAudioMuted
                 ? "text-amber-400 border border-amber-500/40 bg-amber-500/10 shadow-sm"
                 : "text-white/70 hover:text-white border border-white/10"
@@ -499,52 +509,86 @@ export default function CallPage() {
             title={isAudioMuted ? "Click to unmute" : "Click to mute"}
           >
             {isAudioMuted ? <VolumeX className="w-3.5 h-3.5 text-amber-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
-            <span>{isAudioMuted ? "Muted" : "Voice On"}</span>
+            <span className="hidden md:inline">{isAudioMuted ? "Muted" : "Voice On"}</span>
           </button>
 
           {callStatus === "ended" && (
             <button
               onClick={() => setSummaryModalOpen(true)}
-              className="btn-primary text-xs py-1.5 px-3.5 flex items-center gap-1.5 rounded-xl shadow-lg shadow-brand-500/25 animate-pulse"
+              className="btn-primary text-xs py-1.5 px-2.5 sm:px-3.5 flex items-center gap-1.5 rounded-xl shadow-lg shadow-brand-500/25 animate-pulse"
             >
               <FileText className="w-3.5 h-3.5" />
-              Executive Summary
+              <span className="hidden sm:inline">Summary</span>
             </button>
           )}
 
           {activeCase && (
             <button
               onClick={() => setFamilyModalOpen(true)}
-              className="btn-ghost text-xs py-1.5 px-3 flex items-center gap-1.5 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/10 rounded-xl"
+              className="btn-ghost text-xs py-1.5 px-2.5 sm:px-3 flex items-center gap-1.5 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/10 rounded-xl"
+              title="Share Family Link"
             >
               <Users className="w-3.5 h-3.5" />
-              Family Link
+              <span className="hidden md:inline">Family Link</span>
             </button>
           )}
 
           <button
             id="view-ledger-btn"
             onClick={() => { setActiveTab("ledger"); navigate("/ledger"); }}
-            className="btn-ghost text-xs py-1.5 px-3 flex items-center gap-1 rounded-xl"
+            className="btn-ghost text-xs py-1.5 px-2.5 sm:px-3 flex items-center gap-1 rounded-xl"
+            title="Promise Ledger"
           >
-            Ledger <ChevronRight className="w-3 h-3 text-white/40" />
+            <span className="hidden sm:inline">Ledger</span>
+            <ChevronRight className="w-3 h-3 text-white/40" />
           </button>
 
           <button
             id="end-call-btn"
             onClick={handleEndCall}
-            className="btn-danger text-xs py-1.5 px-3 flex items-center gap-1.5 rounded-xl"
+            className="btn-danger text-xs py-1.5 px-2.5 sm:px-3 flex items-center gap-1.5 rounded-xl"
           >
             <PhoneOff className="w-3.5 h-3.5" />
-            End Call
+            <span className="hidden sm:inline">End</span>
           </button>
         </div>
       </header>
 
+      {/* Mobile Tab Switcher */}
+      <div className="lg:hidden flex items-center p-1 bg-[#090e1b] border-b border-white/[0.08] px-3 gap-2 flex-shrink-0">
+        <button
+          onClick={() => setMobileTab("transcript")}
+          className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            mobileTab === "transcript"
+              ? "bg-brand-500/20 text-brand-300 border border-brand-500/40 shadow-sm"
+              : "text-white/50 hover:text-white"
+          }`}
+        >
+          <MessageSquare className="w-3.5 h-3.5 text-brand-400" />
+          <span>Audio &amp; Chat</span>
+        </button>
+        <button
+          onClick={() => setMobileTab("radar")}
+          className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            mobileTab === "radar"
+              ? "bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-sm"
+              : "text-white/50 hover:text-white"
+          }`}
+        >
+          <Radio className="w-3.5 h-3.5 text-purple-400" />
+          <span>SLA Radar</span>
+          {promises.length > 0 && (
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-400 text-black font-extrabold leading-tight">
+              {promises.length}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* Split Terminal Layout */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Column: Real-Time Audio Transcript (65%) */}
-        <main className="flex-1 flex flex-col overflow-hidden bg-[#070c18] relative">
+        <main className={`flex-1 flex-col overflow-hidden bg-[#070c18] relative ${mobileTab === "transcript" ? "flex" : "hidden lg:flex"}`}>
           {/* Live Telephony Waveform & Frequency Visualizer */}
           <AudioWaveformVisualizer
             callStatus={callStatus}
@@ -872,7 +916,7 @@ export default function CallPage() {
         </main>
 
         {/* Right Column: AI Mission Control & Evidence Sidebar (35%) */}
-        <aside className="w-88 sm:w-96 border-l border-white/[0.08] flex flex-col overflow-hidden bg-[#0a0f1d]/95 backdrop-blur-xl flex-shrink-0 shadow-2xl">
+        <aside className={`w-full lg:w-88 lg:sm:w-96 border-l border-white/[0.08] flex-col overflow-hidden bg-[#0a0f1d]/95 backdrop-blur-xl flex-shrink-0 shadow-2xl ${mobileTab === "radar" ? "flex" : "hidden lg:flex"}`}>
           {/* Header */}
           <div className="px-5 py-4 border-b border-white/[0.08] bg-white/[0.02] flex items-center justify-between">
             <div className="flex items-center gap-2">

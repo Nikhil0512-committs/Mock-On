@@ -614,8 +614,8 @@ export default function IntakePage() {
   };
 
   return (
-    <div className="min-h-screen py-10 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
+    <div className="min-h-screen py-5 sm:py-10 px-3 sm:px-6 lg:px-8">
+      <div className="max-w-2xl mx-auto space-y-5 sm:space-y-6 animate-fade-in">
         {/* Clean, Simple Hero */}
         <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-2 bg-brand-500/10 border border-brand-500/20 rounded-full px-3 py-1 mb-1">
@@ -633,13 +633,13 @@ export default function IntakePage() {
         </div>
 
         {/* Central Card Form */}
-        <div className="card p-6 sm:p-7 space-y-6 border border-white/[0.08] bg-[#0c1424]/90 backdrop-blur-xl shadow-2xl rounded-2xl">
+        <div className="card p-4 sm:p-7 space-y-5 sm:space-y-6 border border-white/[0.08] bg-[#0c1424]/90 backdrop-blur-xl shadow-2xl rounded-2xl">
           {/* 1. Category Selection */}
           <div className="space-y-2.5">
             <label className="text-[11px] font-bold text-white/50 uppercase tracking-wider block">
               1. Dispute Category
             </label>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5">
               {DOMAINS.map((d) => {
                 const Icon = d.icon;
                 const isSelected = d.id === domainKey;
@@ -648,7 +648,7 @@ export default function IntakePage() {
                     key={d.id}
                     type="button"
                     onClick={() => handleDomainSelect(d)}
-                    className={`group relative flex flex-col p-3 rounded-2xl border text-left transition-all duration-200 ${
+                    className={`group relative flex flex-col p-2.5 sm:p-3 rounded-2xl border text-left transition-all duration-200 ${
                       isSelected
                         ? "bg-brand-500/15 border-brand-500/70 text-white shadow-lg ring-1 ring-brand-500/40"
                         : "bg-white/[0.02] border-white/[0.06] text-white/70 hover:text-white hover:bg-white/[0.05] hover:border-white/[0.12]"
@@ -985,7 +985,7 @@ export default function IntakePage() {
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5">
               {LANGUAGES.map((l) => {
                 const isSelected = language === l.code;
                 return (
@@ -1020,14 +1020,14 @@ export default function IntakePage() {
           </div>
 
           {/* 4. armour365™ Biometric Voice Authorization */}
-          <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/30 via-slate-900/40 to-blue-950/30 border border-emerald-500/25 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-emerald-950/30 via-slate-900/40 to-blue-950/30 border border-emerald-500/25 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 flex-shrink-0">
                   <Fingerprint className="w-4 h-4" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-xs font-bold text-white tracking-tight">
                       armour365™ Biometric Voice Authorization
                     </span>
@@ -1035,7 +1035,7 @@ export default function IntakePage() {
                       IT Act 2000 Sec 10A
                     </span>
                   </div>
-                  <p className="text-[10.5px] text-white/50">
+                  <p className="text-[10.5px] text-white/50 mt-0.5">
                     Authorizes Shivani to legally represent your account if customer care challenges caller identity.
                   </p>
                 </div>
@@ -1045,7 +1045,7 @@ export default function IntakePage() {
                 type="button"
                 onClick={handlePlayVoiceToken}
                 disabled={isPlayingVoiceToken}
-                className="px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5 transition-all self-start sm:self-auto flex-shrink-0 shadow-sm"
+                className="w-full sm:w-auto justify-center px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5 transition-all self-start sm:self-auto flex-shrink-0 shadow-sm"
               >
                 {isPlayingVoiceToken ? (
                   <>

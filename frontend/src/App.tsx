@@ -54,15 +54,15 @@ function NavigationBar({
               <span className="font-bold text-base tracking-tight text-white group-hover:text-brand-200 transition-colors">
                 Mock-On
               </span>
-              <span className="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-300 border border-brand-500/25">
+              <span className="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-300 border border-brand-500/25 hidden sm:inline-block">
                 AI Personal Assistant
               </span>
             </div>
           </NavLink>
         </div>
 
-        {/* Center Nav tabs */}
-        <nav className="flex items-center gap-1 p-1 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
+        {/* Center Nav tabs — Desktop only (Mobile uses bottom navigation) */}
+        <nav className="hidden md:flex items-center gap-1 p-1 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
           <NavLink
             to="/"
             end
@@ -165,7 +165,18 @@ function NavigationBar({
         </nav>
 
         {/* Right Status & Auth Area */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3">
+          {/* Mobile Disputes Button */}
+          <button
+            id="open-disputes-mobile-btn"
+            onClick={onOpenDisputes}
+            className="md:hidden flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium text-white/80 hover:text-white bg-white/[0.04] border border-white/[0.08]"
+            title="Browse all your registered disputes"
+          >
+            <FolderOpen className="w-3.5 h-3.5 text-brand-400" />
+            <span className="text-xs">Disputes</span>
+          </button>
+
           {simulatedNow && (
             <div className="hidden xl:flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-mono shadow-sm">
               <Clock className="w-3.5 h-3.5" />
@@ -202,6 +213,100 @@ function NavigationBar({
         </div>
       </div>
     </header>
+  );
+}
+
+function MobileBottomNav() {
+  const location = useLocation();
+  const { activeCall, callStatus, isOnHold, promises } = useStore();
+
+  if (location.pathname.startsWith("/family/")) {
+    return null;
+  }
+
+  const isCallActive = activeCall && callStatus !== "ended" && callStatus !== "idle";
+  const pendingCount = promises.filter((p) => p.status === "pending" || p.status === "due_soon").length;
+
+  return (
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#070c18]/95 backdrop-blur-2xl border-t border-white/[0.1] shadow-2xl px-2 py-1.5 flex items-center justify-around">
+      <NavLink
+        to="/"
+        end
+        className={({ isActive }) =>
+          `flex flex-col items-center justify-center py-1 px-3 rounded-xl text-[10px] font-semibold transition-all ${
+            isActive ? "text-emerald-400 bg-emerald-500/10" : "text-white/60 hover:text-white"
+          }`
+        }
+      >
+        <PlusCircle className="w-4 h-4 mb-0.5" />
+        <span>Intake</span>
+      </NavLink>
+
+      <NavLink
+        to="/call"
+        className={({ isActive }) =>
+          `flex flex-col items-center justify-center py-1 px-3 rounded-xl text-[10px] font-semibold transition-all relative ${
+            isActive ? "text-brand-300 bg-brand-500/15" : "text-white/60 hover:text-white"
+          }`
+        }
+      >
+        <div className="relative">
+          <PhoneCall className={`w-4 h-4 mb-0.5 ${isCallActive ? "text-emerald-400 animate-pulse" : ""}`} />
+          {isCallActive && (
+            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+          )}
+        </div>
+        <span>Call</span>
+        {isCallActive && (
+          <span className="absolute -top-0.5 right-1 text-[8px] px-1 rounded-full bg-emerald-500 text-black font-extrabold leading-tight">
+            {isOnHold ? "HOLD" : "LIVE"}
+          </span>
+        )}
+      </NavLink>
+
+      <NavLink
+        to="/ledger"
+        className={({ isActive }) =>
+          `flex flex-col items-center justify-center py-1 px-3 rounded-xl text-[10px] font-semibold transition-all relative ${
+            isActive ? "text-amber-300 bg-amber-500/10" : "text-white/60 hover:text-white"
+          }`
+        }
+      >
+        <div className="relative">
+          <FileCheck2 className="w-4 h-4 mb-0.5" />
+          {pendingCount > 0 && (
+            <span className="absolute -top-1 -right-1.5 text-[8px] px-1 rounded-full bg-amber-500 text-black font-extrabold leading-tight">
+              {pendingCount}
+            </span>
+          )}
+        </div>
+        <span>Ledger</span>
+      </NavLink>
+
+      <NavLink
+        to="/switchboard"
+        className={({ isActive }) =>
+          `flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] font-semibold transition-all ${
+            isActive ? "text-rose-300 bg-rose-500/15" : "text-white/60 hover:text-white"
+          }`
+        }
+      >
+        <Headphones className="w-4 h-4 mb-0.5 text-rose-400" />
+        <span>Operator</span>
+      </NavLink>
+
+      <NavLink
+        to="/demo"
+        className={({ isActive }) =>
+          `flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] font-semibold transition-all ${
+            isActive ? "text-violet-300 bg-violet-500/10" : "text-white/60 hover:text-white"
+          }`
+        }
+      >
+        <FastForward className="w-4 h-4 mb-0.5 text-violet-400" />
+        <span>Demo</span>
+      </NavLink>
+    </nav>
   );
 }
 
@@ -276,7 +381,7 @@ export default function App() {
           onOpenAuth={() => setIsAuthOpen(true)}
           onOpenDisputes={() => setIsDisputesOpen(true)}
         />
-        <main className="flex-1">
+        <main className="flex-1 pb-20 md:pb-0">
           <Routes>
             <Route path="/" element={<IntakePage />} />
             <Route path="/intake" element={<Navigate to="/" replace />} />
@@ -288,6 +393,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
+        <MobileBottomNav />
         <Footer />
         <AuthModal isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} />
         <MyDisputesDrawer isOpen={isDisputesOpen} onClose={() => setIsDisputesOpen(false)} />

@@ -96,19 +96,19 @@ export default function FamilyPage() {
   const amount = (caseData.disputed_amount as string) || "0";
 
   return (
-    <div className="min-h-screen max-w-3xl mx-auto px-6 py-12">
+    <div className="min-h-screen max-w-3xl mx-auto px-3.5 sm:px-6 py-6 sm:py-12">
       {/* Header */}
-      <div className="text-center mb-10">
-        <div className="inline-flex items-center gap-2 bg-emerald-500/15 border border-emerald-500/30 rounded-full px-4 py-1.5 mb-4 shadow-lg shadow-emerald-500/10">
-          <Shield className="w-4 h-4 text-emerald-400" />
-          <span className="text-emerald-300 text-xs font-bold uppercase tracking-wider">
+      <div className="text-center mb-6 sm:mb-10">
+        <div className="inline-flex items-center gap-2 bg-emerald-500/15 border border-emerald-500/30 rounded-full px-3.5 py-1 mb-3 sm:mb-4 shadow-lg shadow-emerald-500/10">
+          <Shield className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-emerald-400" />
+          <span className="text-emerald-300 text-[11px] sm:text-xs font-bold uppercase tracking-wider">
             Family Mode &bull; Read Only Verified
           </span>
         </div>
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mb-2.5">
-          Case Status & Settlement Tracker
+        <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight mb-2">
+          Case Status &amp; Settlement Tracker
         </h1>
-        <p className="text-white/50 text-sm max-w-lg mx-auto leading-relaxed">
+        <p className="text-white/50 text-xs sm:text-sm max-w-lg mx-auto leading-relaxed">
           Real-time dispute commitments and refund tracking recorded by Mock-On Voice-First AI Personal Assistant.
         </p>
       </div>
