@@ -18,7 +18,13 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8000
+    port: int = Field(default=8000, validation_alias="PORT")
     app_cors_origins: str = "http://localhost:5173,http://localhost:3000,http://localhost:4173,https://mock-on.vercel.app"
+
+    @property
+    def effective_port(self) -> int:
+        import os
+        return int(os.environ.get("PORT", self.port or self.app_port or 8000))
 
     # Database (Neon PostgreSQL with SQLite fallback for offline development)
     database_url: str = Field(

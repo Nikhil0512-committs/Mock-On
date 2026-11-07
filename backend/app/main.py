@@ -25,16 +25,38 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle."""
+    import asyncio
     logger.info("Hold-On backend starting up...")
-    # Initialise DB (create tables, pgvector extension)
-    await init_db()
-    logger.info("Database initialised")
+    
+    # Safe DB initialisation with fast timeout; if DB connection is slow, continues in background
+    # This guarantees the web port opens immediately so Render port scan succeeds
+    async def _safe_init():
+        try:
+            await init_db()
+            logger.info("Database successfully initialized")
+        except Exception as e:
+            logger.warning(f"Initial DB connection deferred: {e}")
+
+    try:
+        await asyncio.wait_for(_safe_init(), timeout=4.0)
+    except (asyncio.TimeoutError, Exception) as e:
+        logger.warning(f"DB init taking longer than 4s — scheduling in background so web port binds immediately: {e}")
+        asyncio.create_task(_safe_init())
+
     # Start deadline worker
-    await deadline_worker.start()
-    logger.info("Deadline worker started")
+    try:
+        await deadline_worker.start()
+        logger.info("Deadline worker started")
+    except Exception as e:
+        logger.warning(f"Deadline worker startup warning: {e}")
+
     yield
+
     # Shutdown
-    await deadline_worker.stop()
+    try:
+        await deadline_worker.stop()
+    except Exception:
+        pass
     logger.info("Hold-On backend shut down")
 
 
@@ -93,3 +115,12 @@ async def root():
         "tagline": "The call is only the beginning.",
         "docs": "/docs",
     }
+
+
+if __name__ == "__main__":
+    import os
+    import uvicorn
+    port = int(os.environ.get("PORT", settings.effective_port or 8000))
+    host = os.environ.get("HOST", "0.0.0.0")
+    logger.info(f"Binding and starting Uvicorn server on {host}:{port}...")
+    uvicorn.run("app.main:app", host=host, port=port, log_level="info")
