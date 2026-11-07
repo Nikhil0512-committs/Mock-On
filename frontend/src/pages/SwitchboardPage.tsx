@@ -184,11 +184,13 @@ export default function SwitchboardPage() {
   const [speechLang, setSpeechLang] = useState<"hi-IN" | "en-IN">("hi-IN");
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isAdvocateSpeaking, setIsAdvocateSpeaking] = useState(false);
+  const isAdvocateSpeakingRef = useRef<boolean>(false);
+  const speechBufferRef = useRef<string>("");
+  const isStartingRef = useRef<boolean>(false);
   const silenceTimerRef = useRef<any>(null);
   const restartTimeoutRef = useRef<any>(null);
   const recognitionRef = useRef<any>(null);
   const isListeningRef = useRef(false);
-  const accumulatedTurnTextRef = useRef<string>("");
   const lastSentTextRef = useRef<string>("");
   const lastSentTimeRef = useRef<number>(0);
   const wsRef = useRef<WebSocket | null>(null);
@@ -198,31 +200,28 @@ export default function SwitchboardPage() {
   useEffect(() => {
     switchboardAudioQueue.onStateChange = (playing) => {
       setIsAdvocateSpeaking(playing);
+      isAdvocateSpeakingRef.current = playing;
       if (playing) {
         // AI advocate audio is outputting through speakers:
-        // Teardown speech recognition immediately so the mic does not pick up speaker audio
+        // Abort mic immediately with zero delay so speakers are not heard by mic
         if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
         if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
         if (recognitionRef.current) {
           try {
-            recognitionRef.current.onresult = null;
-            recognitionRef.current.onerror = null;
-            recognitionRef.current.onend = null;
-            recognitionRef.current.stop();
+            recognitionRef.current.abort();
           } catch (_) {}
           recognitionRef.current = null;
         }
         setIsSpeaking(false);
-        accumulatedTurnTextRef.current = "";
       } else {
-        // Advocate finished speaking: wait 400ms for room echo to decay, then restart mic if enabled
+        // Advocate finished speaking: wait 450ms for speaker echo to dissipate, then resume mic if listening was enabled
         if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
         restartTimeoutRef.current = setTimeout(() => {
           if (isListeningRef.current && !switchboardAudioQueue.isPlaying) {
-            accumulatedTurnTextRef.current = "";
+            speechBufferRef.current = "";
             startRecognition();
           }
-        }, 400);
+        }, 450);
       }
     };
     return () => {
@@ -231,91 +230,73 @@ export default function SwitchboardPage() {
   }, [speechLang]);
 
   const startRecognition = () => {
-    if (switchboardAudioQueue.isPlaying) return;
+    if (switchboardAudioQueue.isPlaying || isAdvocateSpeakingRef.current || isStartingRef.current) return;
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) return;
 
-    // Teardown any existing instance first to guarantee only ONE listener is active
     if (recognitionRef.current) {
       try {
-        recognitionRef.current.onresult = null;
-        recognitionRef.current.onerror = null;
-        recognitionRef.current.onend = null;
-        recognitionRef.current.stop();
+        recognitionRef.current.abort();
       } catch (_) {}
       recognitionRef.current = null;
     }
 
     try {
+      isStartingRef.current = true;
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = speechLang;
 
+      recognition.onstart = () => {
+        isStartingRef.current = false;
+        setIsSpeaking(false);
+      };
+
       recognition.onresult = (event: any) => {
-        // Echo cancellation: if AI Advocate is speaking through speakers, ignore
-        if (switchboardAudioQueue.isPlaying) {
+        if (switchboardAudioQueue.isPlaying || isAdvocateSpeakingRef.current) {
           return;
         }
 
-        let finalTranscript = "";
-        let interimTranscript = "";
-        for (let i = 0; i < event.results.length; i++) {
-          const res = event.results[i];
-          if (res.isFinal) {
-            finalTranscript += (finalTranscript ? " " : "") + res[0].transcript.trim();
+        let interim = "";
+        let finalTrans = "";
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const t = event.results[i][0]?.transcript || "";
+          if (event.results[i].isFinal) {
+            finalTrans += (finalTrans ? " " : "") + t.trim();
           } else {
-            interimTranscript += res[0].transcript;
+            interim += t;
           }
         }
 
-        const rawCombined = (finalTranscript + " " + interimTranscript).trim();
-        const clean = deduplicateConsecutivePhrases(rawCombined);
+        if (finalTrans) {
+          speechBufferRef.current = (speechBufferRef.current + " " + finalTrans).trim();
+        }
 
-        if (clean) {
-          setMessageInput(clean);
+        const liveTranscript = (speechBufferRef.current + " " + interim).trim();
+        if (liveTranscript) {
+          setMessageInput(liveTranscript);
           setIsSpeaking(true);
         }
 
         // Auto-send debounce after 950ms of natural silence
-        if (autoSendVoice && clean.length >= 2) {
+        if (autoSendVoice) {
           if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
           silenceTimerRef.current = setTimeout(() => {
-            setIsSpeaking(false);
-            const toSend = clean.trim();
+            const toSend = (speechBufferRef.current + " " + interim).trim();
             if (toSend.length >= 2) {
-              accumulatedTurnTextRef.current = "";
+              speechBufferRef.current = "";
               setMessageInput("");
-
-              // Teardown recognition briefly so Chrome resets its speech buffer
-              if (recognitionRef.current) {
-                try {
-                  recognitionRef.current.onresult = null;
-                  recognitionRef.current.onerror = null;
-                  recognitionRef.current.onend = null;
-                  recognitionRef.current.stop();
-                } catch (_) {}
-                recognitionRef.current = null;
-              }
-
+              setIsSpeaking(false);
               handleSendMessage(toSend);
-
-              // Immediately schedule recognition restart after short buffer flush delay
-              if (isListeningRef.current && !switchboardAudioQueue.isPlaying) {
-                if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
-                restartTimeoutRef.current = setTimeout(() => {
-                  if (isListeningRef.current && !switchboardAudioQueue.isPlaying) {
-                    startRecognition();
-                  }
-                }, 350);
-              }
             }
           }, 950);
         }
       };
 
       recognition.onerror = (event: any) => {
+        isStartingRef.current = false;
         if (event.error === "no-speech" || event.error === "aborted") {
           return;
         }
@@ -326,35 +307,36 @@ export default function SwitchboardPage() {
           alert("Microphone permission was denied. Please allow microphone access in your browser settings.");
           return;
         }
-        if (isListeningRef.current && !switchboardAudioQueue.isPlaying) {
-          if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
-          restartTimeoutRef.current = setTimeout(() => {
-            if (isListeningRef.current && !switchboardAudioQueue.isPlaying) startRecognition();
-          }, 300);
-        }
+        console.warn("Speech recognition error:", event.error);
       };
 
       recognition.onend = () => {
+        isStartingRef.current = false;
         setIsSpeaking(false);
-        // On natural end (browser silence timeout), restart cleanly
-        if (isListeningRef.current && !switchboardAudioQueue.isPlaying) {
+        // Seamless auto-restart on natural pause/timeout without killing session state
+        if (isListeningRef.current && !switchboardAudioQueue.isPlaying && !isAdvocateSpeakingRef.current) {
           if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
           restartTimeoutRef.current = setTimeout(() => {
-            if (isListeningRef.current && !switchboardAudioQueue.isPlaying) {
-              accumulatedTurnTextRef.current = "";
+            if (isListeningRef.current && !switchboardAudioQueue.isPlaying && !isAdvocateSpeakingRef.current) {
               startRecognition();
             }
-          }, 350);
+          }, 200);
         }
       };
 
       recognition.start();
       recognitionRef.current = recognition;
     } catch (e) {
-      console.warn("Recognition start failed:", e);
-      setIsListening(false);
-      isListeningRef.current = false;
-      setIsSpeaking(false);
+      isStartingRef.current = false;
+      console.warn("Recognition start failed, will retry:", e);
+      if (isListeningRef.current) {
+        if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
+        restartTimeoutRef.current = setTimeout(() => {
+          if (isListeningRef.current && !switchboardAudioQueue.isPlaying) {
+            startRecognition();
+          }
+        }, 500);
+      }
     }
   };
 
@@ -366,19 +348,19 @@ export default function SwitchboardPage() {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
 
-      const pending = (messageInput || accumulatedTurnTextRef.current).trim();
-      if (pending) {
-        handleSendMessage(pending);
-      }
+      const pending = (speechBufferRef.current || messageInput).trim();
+      speechBufferRef.current = "";
+      setMessageInput("");
 
       if (recognitionRef.current) {
         try {
-          recognitionRef.current.onresult = null;
-          recognitionRef.current.onerror = null;
-          recognitionRef.current.onend = null;
-          recognitionRef.current.stop();
+          recognitionRef.current.abort();
         } catch (_) {}
         recognitionRef.current = null;
+      }
+
+      if (pending) {
+        handleSendMessage(pending);
       }
       return;
     }
@@ -392,7 +374,7 @@ export default function SwitchboardPage() {
 
     isListeningRef.current = true;
     setIsListening(true);
-    accumulatedTurnTextRef.current = "";
+    speechBufferRef.current = "";
     startRecognition();
   };
 
@@ -597,26 +579,26 @@ export default function SwitchboardPage() {
   };
 
   const handleSendMessage = async (customText?: string) => {
-    const raw = (customText || messageInput).trim();
+    const raw = (customText || messageInput || speechBufferRef.current).trim();
     if (!raw || !activeCallItem) return;
 
     const textToSend = deduplicateConsecutivePhrases(raw);
     if (!textToSend) return;
 
-    // Production-level deduplication: prevent identical submissions within 1.0 second
+    // Production-level deduplication: prevent identical submissions within 0.8 second
     const now = Date.now();
     if (
       textToSend.toLowerCase() === lastSentTextRef.current.toLowerCase() &&
-      now - lastSentTimeRef.current < 1000
+      now - lastSentTimeRef.current < 800
     ) {
       return;
     }
     lastSentTextRef.current = textToSend;
     lastSentTimeRef.current = now;
 
-    // Reset input state and accumulated buffers IMMEDIATELY to prevent repetition
+    // Reset input state and speech buffers IMMEDIATELY to prevent repetition
     setMessageInput("");
-    accumulatedTurnTextRef.current = "";
+    speechBufferRef.current = "";
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
 
     // Optimistically append operator's message with temporary ID so it renders with 0 latency
@@ -637,13 +619,6 @@ export default function SwitchboardPage() {
         },
       ];
     });
-
-    // Stop current recognition cleanly so Chrome resets its internal buffer for next turn
-    if (recognitionRef.current && isListeningRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (_) {}
-    }
 
     setSending(true);
     try {
@@ -1203,12 +1178,11 @@ export default function SwitchboardPage() {
                         ? "Listening to representative voice... Speak now"
                         : "Type representative response or speak to AI personal assistant..."
                     }
-                    disabled={sending}
                     className="flex-1 input py-2.5 text-xs bg-black/40 border-white/[0.1] rounded-xl focus:border-rose-500/60"
                   />
                   <button
                     type="submit"
-                    disabled={sending || !messageInput.trim()}
+                    disabled={!messageInput.trim()}
                     className="btn-primary py-2.5 px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-rose-600 hover:bg-rose-500 shadow-md shadow-rose-600/30"
                   >
                     <Send className="w-3.5 h-3.5" />

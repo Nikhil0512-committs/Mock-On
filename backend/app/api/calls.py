@@ -286,8 +286,7 @@ async def send_call_message(
     if not text:
         raise HTTPException(400, "Text cannot be empty")
 
-    # Anti-race / rapid duplicate suppression check:
-    # If the identical text from the same speaker was sent within the last 2 seconds, deduplicate!
+    # Anti-race / rapid duplicate suppression check (prevent accidental double-clicks < 0.8s)
     prev_utt_res = await db.execute(
         select(Utterance)
         .where(Utterance.call_id == call_id)
@@ -298,7 +297,7 @@ async def send_call_message(
     if prev_utt and prev_utt.speaker_role == payload.speaker and prev_utt.raw_text.strip().lower() == text.lower():
         now_dt = datetime.now(timezone.utc)
         prev_dt = prev_utt.created_at
-        if prev_dt and (now_dt - prev_dt).total_seconds() < 2.5:
+        if prev_dt and (now_dt - prev_dt).total_seconds() < 0.8:
             logger.info(f"Deduplicated rapid duplicate utterance on call {call_id}: '{text}'")
             return {
                 "ok": True,
@@ -441,18 +440,6 @@ async def send_call_message(
                                     "normalised_text": u.normalised_text,
                                 })
 
-                        # Freeze guard: skip ONLY if the advocate replied within the last 2 seconds.
-                        if all_turns and all_turns[-1].speaker_role == "user":
-                            last_adv_time = all_turns[-1].created_at
-                            if last_adv_time:
-                                adv_age_s = (datetime.now(timezone.utc) - last_adv_time).total_seconds()
-                                if adv_age_s < 2.0:
-                                    logger.info(
-                                        f"Advocate replied {adv_age_s:.1f}s ago on call {call_id}; "
-                                        "skipping rapid-duplicate advocate reply."
-                                    )
-                                    return
-
                         # Generate intelligent context-aware reply using Sarvam LLM + Intake docket
                         adv_result = await sarvam_extractor.generate_advocate_response(
                             case_info=info,
@@ -484,7 +471,7 @@ async def send_call_message(
                                     amount_str=f"₹{amt}",
                                     ticket_number=info.get("ticket_number") or "TKT-2026-78432",
                                     rep_statement=text,
-                                ))
+                                    ))
 
                         adv_id = str(uuid.uuid4())
                         async with AsyncSessionLocal() as async_db:
@@ -521,23 +508,23 @@ async def send_call_message(
                             },
                         })
 
-                        # ── BACKGROUND TTS ────────────────────────────────────────────────
-                        # Synthesize audio and send as a secondary audio_patch event.
-                        # The UI plays it via the SequentialAudioQueue when it arrives.
-                        try:
-                            from app.services.gnani_tts import tts_adapter
-                            import base64
-                            adv_bytes = await tts_adapter.synthesise(advocate_text)
-                            adv_audio = base64.b64encode(adv_bytes).decode("utf-8")
-                            await manager.broadcast(call_id, {
-                                "type": "audio_patch",
-                                "utterance_id": adv_id,
-                                "text": advocate_text,
-                                "thought_process": thought_process,
-                                "audio_b64": adv_audio,
-                            })
-                        except Exception as e:
-                            logger.debug(f"Advocate TTS synthesis failed (text already delivered): {e}")
+                    # ── BACKGROUND TTS (Executed OUTSIDE lock to maintain zero-latency responsiveness) ──
+                    # Synthesize audio and send as a secondary audio_patch event.
+                    # The UI plays it via the SequentialAudioQueue when it arrives.
+                    try:
+                        from app.services.gnani_tts import tts_adapter
+                        import base64
+                        adv_bytes = await tts_adapter.synthesise(advocate_text)
+                        adv_audio = base64.b64encode(adv_bytes).decode("utf-8")
+                        await manager.broadcast(call_id, {
+                            "type": "audio_patch",
+                            "utterance_id": adv_id,
+                            "text": advocate_text,
+                            "thought_process": thought_process,
+                            "audio_b64": adv_audio,
+                        })
+                    except Exception as e:
+                        logger.debug(f"Advocate TTS synthesis failed (text already delivered): {e}")
 
                         # ── AUTONOMOUS CALL TERMINATION ON CONFIRMED REFUND ──────────────
                         # When a refund or settlement commitment is detected from the representative,
