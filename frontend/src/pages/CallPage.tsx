@@ -37,6 +37,7 @@ import { useStore } from "../store";
 import { useCallWebSocket } from "../hooks/useCallWebSocket";
 import { callsApi, casesApi, promisesApi } from "../lib/api";
 import { deduplicateConsecutivePhrases } from "./SwitchboardPage";
+import { useI18n } from "../lib/i18n";
 import ShareFamilyModal from "../components/ShareFamilyModal";
 import CallSummaryModal from "../components/CallSummaryModal";
 import AudioWaveformVisualizer from "../components/AudioWaveformVisualizer";
@@ -199,6 +200,7 @@ export default function CallPage() {
     setIsAudioMuted,
     evasionRadar,
   } = useStore();
+  const { t } = useI18n();
 
   useCallWebSocket(activeCall?.id ?? null);
 
@@ -995,7 +997,7 @@ export default function CallPage() {
                   <div className="flex items-center gap-1.5">
                     <ShieldAlert className="w-3.5 h-3.5 text-brand-400" />
                     <span className="text-[11px] font-bold uppercase tracking-wider text-white/80">
-                      Evasion &amp; Commitment Meter
+                      {t("call.evasion_meter", "Evasion & Commitment Meter")}
                     </span>
                   </div>
                   <span
@@ -1011,14 +1013,14 @@ export default function CallPage() {
                         : "bg-blue-500/20 text-blue-300 border-blue-500/40"
                     }`}
                   >
-                    {evasionRadar ? evasionRadar.label : "Monitoring Speech..."}
+                    {evasionRadar ? evasionRadar.label : t("call.monitoring", "Monitoring Speech...")}
                   </span>
                 </div>
 
                 {/* Dynamic Precision Gauge with Sweeping Radar Needle */}
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-[11px] font-semibold">
-                    <span className="text-white/50">Binding Certainty</span>
+                    <span className="text-white/50">{t("call.binding_certainty", "Binding Certainty")}</span>
                     <span
                       className={
                         (evasionRadar?.score ?? 50) >= 75

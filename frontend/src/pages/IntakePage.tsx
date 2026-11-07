@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { casesApi, callsApi } from "../lib/api";
 import { useStore } from "../store";
+import { useI18n } from "../lib/i18n";
 
 const LANGUAGES = [
   {
@@ -489,6 +490,7 @@ function getClientSideStatutoryEnhancement(
 
 export default function IntakePage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const {
     setActiveCase,
     setActiveCall,
@@ -738,14 +740,14 @@ export default function IntakePage() {
           <div className="inline-flex items-center gap-2 bg-brand-500/10 border border-brand-500/20 rounded-full px-3 py-1 mb-1">
             <span className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse" />
             <span className="text-brand-300 text-xs font-semibold tracking-wide">
-              Voice-First AI Personal Assistant
+              {t("hero.badge", "Voice-First AI Personal Assistant")}
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-            File a Helpline Dispute
+            {t("hero.title", "File a Helpline Dispute")}
           </h1>
           <p className="text-xs sm:text-sm text-white/50 max-w-md mx-auto leading-relaxed">
-            Mock-On calls customer support on your behalf, negotiates your refund, and records legally binding promises.
+            {t("hero.subtitle", "Mock-On calls customer support on your behalf, negotiates your refund, and records legally binding promises.")}
           </p>
         </div>
 
@@ -754,7 +756,7 @@ export default function IntakePage() {
           {/* 1. Category Selection */}
           <div className="space-y-2.5">
             <label className="text-[11px] font-bold text-white/50 uppercase tracking-wider block">
-              1. Dispute Category
+              {t("intake.step1", "1. Dispute Category")}
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5">
               {DOMAINS.map((d) => {
@@ -797,7 +799,7 @@ export default function IntakePage() {
           {/* 2. Provider & Identifier */}
           <div className="space-y-4 pt-4 border-t border-white/[0.06]">
             <label className="text-[11px] font-bold text-white/50 uppercase tracking-wider block">
-              2. Transaction &amp; Account Details
+              {t("intake.step2", "2. Transaction & Account Details")}
             </label>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -852,7 +854,7 @@ export default function IntakePage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
               <div>
                 <label className="text-xs font-medium text-white/70 block mb-1.5">
-                  Disputed Amount (₹)
+                  {t("intake.disputed_amount", "Disputed Amount (₹)")}
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-400 font-bold text-xs">
@@ -887,7 +889,7 @@ export default function IntakePage() {
 
               <div>
                 <label className="text-xs font-medium text-white/70 block mb-1.5">
-                  Registered Mobile
+                  {t("intake.registered_mobile", "Registered Mobile")}
                 </label>
                 <input
                   type="text"
@@ -900,7 +902,7 @@ export default function IntakePage() {
 
               <div>
                 <label className="text-xs font-medium text-white/70 block mb-1.5">
-                  Notification Email
+                  {t("intake.notification_email", "Notification Email")}
                 </label>
                 <input
                   type="email"
@@ -917,7 +919,7 @@ export default function IntakePage() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                 <div>
                   <label className="text-xs font-semibold text-white/80 block">
-                    Company Customer Support / Helpline Number{" "}
+                    {t("intake.support_helpline", "Company Customer Support / Helpline Number")}{" "}
                     <span className="text-[10px] text-white/40 font-normal">(Optional)</span>
                   </label>
                   <p className="text-[10.5px] text-white/40 mt-0.5 leading-relaxed">
@@ -934,12 +936,12 @@ export default function IntakePage() {
                   {isScraping ? (
                     <>
                       <Loader2 className="w-3 h-3 animate-spin text-brand-400" />
-                      <span>Scraping Web...</span>
+                      <span>{t("intake.scraping", "Scraping Web...")}</span>
                     </>
                   ) : (
                     <>
                       <Globe className="w-3 h-3 text-brand-400" />
-                      <span>Auto-Scrape Number</span>
+                      <span>{t("intake.scrape_btn", "Auto-Scrape Number")}</span>
                     </>
                   )}
                 </button>
@@ -990,7 +992,7 @@ export default function IntakePage() {
             <div className="space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <label className="text-xs font-medium text-white/70">
-                  Describe what happened
+                  {t("intake.describe_problem", "Describe what happened")}
                 </label>
                 <div className="flex items-center gap-2">
                   {/* AI Grievance Polisher Buttons */}
@@ -1002,7 +1004,7 @@ export default function IntakePage() {
                       title="Revert to prior draft"
                     >
                       <RotateCcw className="w-3 h-3 text-amber-400" />
-                      <span>Undo</span>
+                      <span>{t("intake.undo", "Undo")}</span>
                     </button>
                   )}
 
@@ -1016,12 +1018,12 @@ export default function IntakePage() {
                     {isPolishing ? (
                       <>
                         <Loader2 className="w-3 h-3 animate-spin text-white" />
-                        <span>Polishing with Law...</span>
+                        <span>{t("intake.polishing", "Polishing with Law...")}</span>
                       </>
                     ) : (
                       <>
                         <Sparkles className="w-3 h-3 text-amber-300" />
-                        <span>AI Legalize Grievance</span>
+                        <span>{t("intake.legalize_btn", "AI Legalize Grievance")}</span>
                       </>
                     )}
                   </button>
@@ -1091,7 +1093,7 @@ export default function IntakePage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
               <div className="flex items-center gap-2">
                 <label className="text-[11px] font-bold text-white/50 uppercase tracking-wider block">
-                  3. Indic Regional Dialect &amp; Voice Persona
+                  {t("intake.step3", "3. Indic Regional Dialect & Voice Persona")}
                 </label>
                 <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/30">
                   Voice: Shivani (Female)
@@ -1146,7 +1148,7 @@ export default function IntakePage() {
                 <div>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-xs font-bold text-white tracking-tight">
-                      armour365™ Biometric Voice Authorization
+                      {t("intake.step4", "4. armour365™ Biometric Voice Authorization")}
                     </span>
                     <span className="text-[9.5px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                       IT Act 2000 Sec 10A
@@ -1226,7 +1228,7 @@ export default function IntakePage() {
               >
                 <div className="flex items-center gap-2 font-bold text-xs text-white">
                   <Headphones className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Automated AI Call</span>
+                  <span>{t("intake.call_mode_auto", "AI Automated Call")}</span>
                 </div>
                 <p className="text-[11px] text-white/50 mt-0.5">
                   Autonomous speech agent negotiates with customer care.
@@ -1244,7 +1246,7 @@ export default function IntakePage() {
               >
                 <div className="flex items-center gap-2 font-bold text-xs text-white">
                   <Phone className="w-3.5 h-3.5 text-rose-400" />
-                  <span>Live Switchboard (Teammate)</span>
+                  <span>{t("intake.call_mode_switchboard", "Live Company Operator (Switchboard)")}</span>
                 </div>
                 <p className="text-[11px] text-white/50 mt-0.5">
                   Teammate acts as representative live via Switchboard.
@@ -1304,8 +1306,8 @@ export default function IntakePage() {
                   <Phone className="w-4 h-4" />
                   <span>
                     {callMode === "switchboard"
-                      ? `Dispatch to ${provider.trim() || selectedDomain.defaultProvider} Operator Desk`
-                      : `Dispatch Agent to ${provider.trim() || selectedDomain.defaultProvider} Helpline`}
+                      ? `${t("intake.start_switchboard", "Dispatch Call to Live Operator")} (${provider.trim() || selectedDomain.defaultProvider})`
+                      : `${t("intake.start_call", "Start AI Automated Call")} (${provider.trim() || selectedDomain.defaultProvider})`}
                   </span>
                   <ArrowRight className="w-4 h-4 ml-1" />
                 </>

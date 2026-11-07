@@ -20,8 +20,10 @@ import FamilyPage from "./pages/FamilyPage";
 import SwitchboardPage from "./pages/SwitchboardPage";
 import AuthModal from "./components/AuthModal";
 import MyDisputesDrawer from "./components/MyDisputesDrawer";
+import LanguageSelector from "./components/LanguageSelector";
 import { authApi } from "./lib/api";
 import { useStore } from "./store";
+import { useI18n } from "./lib/i18n";
 
 function NavigationBar({
   onOpenAuth,
@@ -32,6 +34,7 @@ function NavigationBar({
 }) {
   const location = useLocation();
   const { activeCall, callStatus, isOnHold, promises, simulatedNow, currentUser, logout } = useStore();
+  const { t } = useI18n();
 
   const isCallActive = activeCall && callStatus !== "ended" && callStatus !== "idle";
   const pendingCount = promises.filter((p) => p.status === "pending" || p.status === "due_soon").length;
@@ -75,7 +78,7 @@ function NavigationBar({
             }
           >
             <PlusCircle className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Intake</span>
+            <span>{t("nav.intake", "Intake")}</span>
           </NavLink>
 
           <NavLink
@@ -94,7 +97,7 @@ function NavigationBar({
                 <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
               )}
             </div>
-            <span>Live Call</span>
+            <span>{t("nav.live_call", "Live Call")}</span>
             {isCallActive && (
               <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
                 {isOnHold ? "HOLD" : "LIVE"}
@@ -113,7 +116,7 @@ function NavigationBar({
             }
           >
             <FileCheck2 className="w-3.5 h-3.5 text-brand-400" />
-            <span>Ledger</span>
+            <span>{t("nav.ledger", "Ledger")}</span>
             {pendingCount > 0 && (
               <span className="text-[9.5px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
                 {pendingCount}
@@ -128,7 +131,7 @@ function NavigationBar({
             title="Browse all your registered disputes"
           >
             <FolderOpen className="w-3.5 h-3.5 text-brand-400" />
-            <span>Disputes</span>
+            <span>{t("nav.disputes", "Disputes")}</span>
           </button>
 
           <div className="w-px h-3.5 bg-white/10 mx-1" />
@@ -145,7 +148,7 @@ function NavigationBar({
             title="Company Operator Switchboard"
           >
             <Headphones className="w-3.5 h-3.5 text-rose-400" />
-            <span className="hidden sm:inline">Switchboard</span>
+            <span className="hidden sm:inline">{t("nav.switchboard", "Switchboard")}</span>
           </NavLink>
 
           <NavLink
@@ -160,12 +163,22 @@ function NavigationBar({
             title="Demo Simulation Lab"
           >
             <FastForward className="w-3.5 h-3.5 text-violet-400" />
-            <span className="hidden sm:inline">Demo</span>
+            <span className="hidden sm:inline">{t("nav.demo", "Demo")}</span>
           </NavLink>
+
+          <div className="w-px h-3.5 bg-white/10 mx-1" />
+
+          {/* Regional Languages Dropdown (to the right of Demo) */}
+          <LanguageSelector />
         </nav>
 
         {/* Right Status & Auth Area */}
         <div className="flex items-center gap-1.5 sm:gap-3">
+          {/* Mobile Language Selector */}
+          <div className="md:hidden">
+            <LanguageSelector />
+          </div>
+
           {/* Mobile Disputes Button */}
           <button
             id="open-disputes-mobile-btn"
@@ -174,13 +187,13 @@ function NavigationBar({
             title="Browse all your registered disputes"
           >
             <FolderOpen className="w-3.5 h-3.5 text-brand-400" />
-            <span className="text-xs">Disputes</span>
+            <span className="text-xs">{t("nav.disputes", "Disputes")}</span>
           </button>
 
           {simulatedNow && (
             <div className="hidden xl:flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-mono shadow-sm">
               <Clock className="w-3.5 h-3.5" />
-              <span>Demo Clock</span>
+              <span>{t("nav.demo_clock", "Demo Clock")}</span>
             </div>
           )}
 
@@ -207,7 +220,7 @@ function NavigationBar({
               className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-brand-600/40 to-indigo-600/40 hover:from-brand-600/60 hover:to-indigo-600/60 border border-brand-500/40 text-white text-xs font-semibold shadow-sm transition-all"
             >
               <LogIn className="w-3.5 h-3.5 text-brand-300" />
-              <span>Sign In</span>
+              <span>{t("nav.sign_in", "Sign In")}</span>
             </button>
           )}
         </div>
@@ -219,6 +232,7 @@ function NavigationBar({
 function MobileBottomNav() {
   const location = useLocation();
   const { activeCall, callStatus, isOnHold, promises } = useStore();
+  const { t } = useI18n();
 
   if (location.pathname.startsWith("/family/")) {
     return null;
@@ -239,7 +253,7 @@ function MobileBottomNav() {
         }
       >
         <PlusCircle className="w-4 h-4 mb-0.5" />
-        <span>Intake</span>
+        <span>{t("nav.intake", "Intake")}</span>
       </NavLink>
 
       <NavLink
@@ -256,7 +270,7 @@ function MobileBottomNav() {
             <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
           )}
         </div>
-        <span>Call</span>
+        <span>{t("nav.live_call", "Call")}</span>
         {isCallActive && (
           <span className="absolute -top-0.5 right-1 text-[8px] px-1 rounded-full bg-emerald-500 text-black font-extrabold leading-tight">
             {isOnHold ? "HOLD" : "LIVE"}
@@ -280,7 +294,7 @@ function MobileBottomNav() {
             </span>
           )}
         </div>
-        <span>Ledger</span>
+        <span>{t("nav.ledger", "Ledger")}</span>
       </NavLink>
 
       <NavLink
@@ -292,7 +306,7 @@ function MobileBottomNav() {
         }
       >
         <Headphones className="w-4 h-4 mb-0.5 text-rose-400" />
-        <span>Operator</span>
+        <span>{t("nav.switchboard", "Operator")}</span>
       </NavLink>
 
       <NavLink
@@ -304,7 +318,7 @@ function MobileBottomNav() {
         }
       >
         <FastForward className="w-4 h-4 mb-0.5 text-violet-400" />
-        <span>Demo</span>
+        <span>{t("nav.demo", "Demo")}</span>
       </NavLink>
     </nav>
   );

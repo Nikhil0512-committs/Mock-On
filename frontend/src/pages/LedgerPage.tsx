@@ -37,6 +37,7 @@ import {
 import { format } from "date-fns";
 import { promisesApi, casesApi } from "../lib/api";
 import { useStore } from "../store";
+import { useI18n } from "../lib/i18n";
 import type { Promise as HPromise, PromiseStatus, Case } from "../types";
 import ShareFamilyModal from "../components/ShareFamilyModal";
 import LegalNoticeModal from "../components/LegalNoticeModal";
@@ -398,6 +399,7 @@ function PromiseCard({
 
 export default function LedgerPage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const { activeCase, setActiveCase, promises, setPromises } = useStore();
   const [cases, setCases] = useState<Case[]>([]);
   const [loadingCases, setLoadingCases] = useState(true);
@@ -507,7 +509,9 @@ export default function LedgerPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/[0.08]">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Promise Ledger</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+                {t("ledger.title", "Promise Ledger")}
+              </h1>
               <span className="text-[11px] sm:text-xs px-2 py-0.5 rounded-full font-semibold bg-brand-500/15 text-brand-300 border border-brand-500/30">
                 {cases.length} disputes
               </span>
@@ -516,7 +520,7 @@ export default function LedgerPage() {
               </span>
             </div>
             <p className="text-xs sm:text-sm text-white/50 mt-1 leading-relaxed">
-              Tamper-evident record of verbal helpline commitments, audio evidence, and statutory deadlines categorized by dispute domain.
+              {t("ledger.subtitle", "Tamper-evident record of verbal helpline commitments, audio evidence, and statutory deadlines categorized by dispute domain.")}
             </p>
           </div>
           <div className="flex items-center gap-2 self-start sm:self-auto">
