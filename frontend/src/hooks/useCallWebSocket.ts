@@ -285,7 +285,7 @@ export function useCallWebSocket(callId: string | null) {
           break;
       }
     },
-    [appendUtterance, setCallStatus, setIsOnHold, addProposal]
+    [appendUtterance, setCallStatus, setCallEndInfo, setIsOnHold, addProposal, setEvasionRadar]
   );
 
   useEffect(() => {

@@ -26,11 +26,14 @@ _HOLIDAYS_2026 = {
 
 # Hindi + English number words to integer mapping
 _NUMBER_WORDS: dict[str, int] = {
-    "ek": 1, "do": 2, "teen": 3, "tin": 3, "char": 4, "paanch": 5, "chhe": 6,
+    "ek": 1, "do": 2, "teen": 3, "tin": 3, "char": 4, "chaar": 4, "paanch": 5, "chhe": 6,
     "saat": 7, "aath": 8, "nau": 9, "das": 10,
     "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
     "seven": 7, "eight": 8, "nine": 9, "ten": 10, "fifteen": 15,
     "twenty": 20, "thirty": 30,
+    # Hindi Devanagari words
+    "एक": 1, "दो": 2, "तीन": 3, "चार": 4, "पांच": 5, "पाँच": 5, "छह": 6,
+    "सात": 7, "आठ": 8, "नौ": 9, "दस": 10, "पंद्रह": 15, "बीस": 20, "तीस": 30,
 }
 
 
@@ -67,7 +70,8 @@ class PromiseValidator:
         return all(r.ok for r in results)
 
     def blocking_failures(self, results: list[ValidationResult]) -> list[ValidationResult]:
-        return [r for r in results if not r.ok]
+        # Date parsing ambiguity is non-blocking — promise is created with needs_date_confirmation=True
+        return [r for r in results if not r.ok and r.field != "date"]
 
     # --- Individual checks ---
 
@@ -185,35 +189,37 @@ def parse_date_phrase(phrase: str, ref_date: datetime | None = None) -> datetime
 
     p = phrase.lower().strip()
 
-    # Absolute patterns: DD/MM, DD-MM-YYYY, etc.
-    abs_match = re.search(r"(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?", p)
-    if abs_match:
-        day, month = int(abs_match.group(1)), int(abs_match.group(2))
-        year = int(abs_match.group(3)) if abs_match.group(3) else ref_date.year
-        if year < 100:
-            year += 2000
-        try:
-            return IST.localize(datetime(year, month, day))
-        except ValueError:
-            pass
+    # Relative check: if phrase contains relative words, skip calendar slash/dash matching
+    is_relative = any(w in p for w in ["day", "days", "din", "दिन", "दिनों", "hour", "hours", "ghante", "ghanta", "घंटे", "घंटा", "कार्य", "business", "working", "week", "weeks", "hafta", "hafte", "हफ्ते"])
+    if not is_relative:
+        # Absolute patterns: DD/MM, DD-MM-YYYY, etc.
+        abs_match = re.search(r"(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?", p)
+        if abs_match:
+            day, month = int(abs_match.group(1)), int(abs_match.group(2))
+            year = int(abs_match.group(3)) if abs_match.group(3) else ref_date.year
+            if year < 100:
+                year += 2000
+            try:
+                return IST.localize(datetime(year, month, day))
+            except ValueError:
+                pass
 
-    # Relative: "N working days" / "N calendar days"
-    # Match number word or digit
+    # Relative: "N working days" / "N calendar days" / "N din" / "N दिन"
     num = _extract_number(p)
     if num is not None:
-        if "hour" in p or "ghante" in p or "ghanta" in p:
+        if any(h in p for h in ["hour", "hours", "ghante", "ghanta", "घंटे", "घंटा"]):
             return ref_date + timedelta(hours=num)
-        if "working" in p or "business" in p or "kaam" in p:
+        if any(w in p for w in ["working", "business", "kaam", "कार्य"]):
             return _add_working_days(ref_date, num)
-        if "day" in p or "din" in p:
+        if any(d in p for d in ["day", "days", "din", "दिन", "दिनों"]):
             return ref_date + timedelta(days=num)
-        if "week" in p or "hafta" in p or "hafte" in p:
+        if any(wk in p for wk in ["week", "weeks", "hafta", "hafte", "हफ्ते", "सप्ताह"]):
             return ref_date + timedelta(weeks=num)
 
-    # Named: "tomorrow" / "kal"
-    if "tomorrow" in p or p.strip() == "kal":
+    # Named: "tomorrow" / "kal" / "kal tak"
+    if any(k in p for k in ["tomorrow", "kal tak", "kal", "कल तक", "कल"]):
         return ref_date + timedelta(days=1)
-    if "today" in p or p.strip() == "aaj":
+    if any(a in p for a in ["today", "aaj", "आज"]):
         return ref_date
 
     return None  # Unknown — needs user confirmation
@@ -221,14 +227,27 @@ def parse_date_phrase(phrase: str, ref_date: datetime | None = None) -> datetime
 
 def _extract_number(text: str) -> int | None:
     """Extract a number (digit or word) from text."""
+    # Match range like "3-4" or "3 to 4" or "3 se 4" or "तीन से चार"
+    range_match = re.search(r"(\d+)\s*(?:-|to|se|से)\s*(\d+)", text)
+    if range_match:
+        return int(range_match.group(1))
     # Try digit first
     digit = re.search(r"\b(\d+)\b", text)
     if digit:
         return int(digit.group(1))
-    # Try word
-    for word, val in _NUMBER_WORDS.items():
-        if re.search(rf"\b{word}\b", text):
-            return val
+    # Try Devanagari digits
+    dev_digit = re.search(r"([०-९]+)", text)
+    if dev_digit:
+        devanagari_to_ascii = str.maketrans("०१२३४५६७८९", "0123456789")
+        return int(dev_digit.group(1).translate(devanagari_to_ascii))
+    # Try words (longest word first, substring matching for Devanagari)
+    for word, val in sorted(_NUMBER_WORDS.items(), key=lambda x: -len(x[0])):
+        if ord(word[0]) > 127:
+            if word in text:
+                return val
+        else:
+            if re.search(rf"\b{word}\b", text, re.IGNORECASE):
+                return val
     return None
 
 

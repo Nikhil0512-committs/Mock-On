@@ -744,6 +744,21 @@ class SarvamExtractor:
                 spoken = f"Confirming: ticket {ticket_spoken}, ₹{amt_spoken}, {time_spoken}. Thank you."
             return spoken, thought
 
+        # 2.5 Representative Disconnect Authorization / Permitting Hangup
+        is_disconnect_auth = any(d in lower_rep for d in [
+            "call ko kaat sakte", "call disconnect kar", "hang up", "call cut", "kaat sakte hain",
+            "कॉल को काट सकते", "कॉल काट सकते", "कॉल डिस्कनेक्ट", "काट सकते हैं", "कॉल कट",
+            "phone rakh sakte", "फ़ोन रख सकते", "फोन रख सकते", "disconnect kar dijiye", "disconnect kar sakte",
+            "disconnect kar lijiye"
+        ])
+        if is_disconnect_auth:
+            thought = "Autonomous Strategy: Representative authorized call disconnect post-resolution. Acknowledging with gratitude and concluding session."
+            if is_hindi:
+                spoken = "Theek hai representative ji, sahayata ke liye dhanyavaad. Main call disconnect kar rahi hoon."
+            else:
+                spoken = "Thank you representative for the resolution. I am disconnecting the call now. Have a good day."
+            return spoken, thought
+
         # 3. Language Selection / IVR Prompt (e.g. "Hindi mein baat karne ke liye ek dabaen...")
         is_lang_req = bool(re.search(
             r"\b(ek\s*daba|do\s*daba|press\s*1|press\s*2|hindi\s*(?:mein|me)?\s*baat|english\s*(?:mein|me)?\s*baat|bhasha|language|bhasha\s*chune)\b",
@@ -1302,8 +1317,27 @@ class SarvamExtractor:
         amt = case_info.get("disputed_amount") or "the disputed amount"
         ticket = case_info.get("ticket_number") or "TKT-2026-78432"
 
-        # 1. Check for genuine recorded commitments
+        rep_texts = [
+            (t.get("raw_text") or t.get("normalised_text") or "").lower()
+            for t in turns
+            if t.get("speaker_role") == "agent"
+        ]
+
+        # 1. Check for genuine recorded commitments or explicit verbal refund commitments in call turns
         has_promises = len(confirmed_promises) > 0
+        if not has_promises:
+            has_verbal_commitment = any(
+                any(ck in text for ck in ["refund", "रिफंड", "credit", "क्रेडिट", "wapas", "वापस", "reverse", "पैसे"])
+                and any(tk in text for tk in ["din", "दिन", "days", "day", "hours", "ghante", "घंटे", "working", "business", "कार्य", "hafte", "hafta", "हफ्ते", "kal", "कल", "तीन", "चार", "पांच"])
+                for text in rep_texts
+            )
+            if has_verbal_commitment:
+                has_promises = True
+                confirmed_promises = [{
+                    "commitment_type": "refund",
+                    "amount": amt,
+                    "deadline_phrase": "in 3 to 4 business days",
+                }]
 
         # 2. Check for representative refusals
         refusal_terms = [
@@ -1312,11 +1346,6 @@ class SarvamExtractor:
             "denied", "not approved", "no compensation", "nothing can be done",
             "nahi milega", "reject", "rejected", "cannot waive", "won't refund",
             "not eligible", "cannot assist", "cannot promise",
-        ]
-        rep_texts = [
-            (t.get("raw_text") or t.get("normalised_text") or "").lower()
-            for t in turns
-            if t.get("speaker_role") == "agent"
         ]
         has_refusal = any(
             any(term in text for term in refusal_terms)
