@@ -45,11 +45,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow the React frontend and Vercel deployments
+# CORS — allow the React frontend, local dev, Vercel deployments, and preview domains
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

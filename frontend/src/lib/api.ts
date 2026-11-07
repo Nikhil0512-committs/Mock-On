@@ -41,7 +41,12 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const config = error.config;
-    if (!config || config.__retryCount) {
+    if (!config) {
+      return Promise.reject(error);
+    }
+
+    config.__retryCount = config.__retryCount || 0;
+    if (config.__retryCount >= 2) {
       return Promise.reject(error);
     }
 
@@ -52,10 +57,18 @@ api.interceptors.response.use(
       error.message?.includes("Network Error") ||
       error.message?.includes("timeout");
 
-    // Only retry GET or auth login/register if server was asleep
-    if (isNetworkOrReset && (!config.method || config.method.toLowerCase() === "get" || config.url?.includes("/auth/"))) {
-      config.__retryCount = 1;
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+    const isSafeToRetry =
+      !config.method ||
+      config.method.toLowerCase() === "get" ||
+      config.url?.includes("/auth/") ||
+      config.url?.includes("/enhance_grievance") ||
+      config.url?.includes("/scrape_helpline");
+
+    if (isNetworkOrReset && isSafeToRetry) {
+      config.__retryCount += 1;
+      const delayMs = config.__retryCount * 1500;
+      console.warn(`[Hold-On API] Server waking up / connection reset on ${config.url}. Auto-retrying (attempt ${config.__retryCount}/2) in ${delayMs}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
       return api(config);
     }
 
