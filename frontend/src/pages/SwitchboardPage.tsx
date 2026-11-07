@@ -181,6 +181,7 @@ export default function SwitchboardPage() {
   const [refusalDetected, setRefusalDetected] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [autoSendVoice, setAutoSendVoice] = useState(true);
+  const [speechLang, setSpeechLang] = useState<"hi-IN" | "en-IN">("hi-IN");
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isAdvocateSpeaking, setIsAdvocateSpeaking] = useState(false);
   const silenceTimerRef = useRef<any>(null);
@@ -214,20 +215,20 @@ export default function SwitchboardPage() {
         setIsSpeaking(false);
         accumulatedTurnTextRef.current = "";
       } else {
-        // Advocate finished speaking: wait 500ms for room echo to decay, then restart mic if enabled
+        // Advocate finished speaking: wait 400ms for room echo to decay, then restart mic if enabled
         if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
         restartTimeoutRef.current = setTimeout(() => {
           if (isListeningRef.current && !switchboardAudioQueue.isPlaying) {
             accumulatedTurnTextRef.current = "";
             startRecognition();
           }
-        }, 500);
+        }, 400);
       }
     };
     return () => {
       switchboardAudioQueue.onStateChange = null;
     };
-  }, []);
+  }, [speechLang]);
 
   const startRecognition = () => {
     if (switchboardAudioQueue.isPlaying) return;
@@ -250,7 +251,7 @@ export default function SwitchboardPage() {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
-      recognition.lang = "en-IN";
+      recognition.lang = speechLang;
 
       recognition.onresult = (event: any) => {
         // Echo cancellation: if AI Advocate is speaking through speakers, ignore
@@ -277,14 +278,17 @@ export default function SwitchboardPage() {
           setIsSpeaking(true);
         }
 
-        // Auto-send debounce after 650ms of natural silence (fast, responsive)
+        // Auto-send debounce after 950ms of natural silence
         if (autoSendVoice && clean.length >= 2) {
           if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
           silenceTimerRef.current = setTimeout(() => {
             setIsSpeaking(false);
             const toSend = clean.trim();
             if (toSend.length >= 2) {
-              // Teardown recognition immediately so Chrome does not retain internal event.results
+              accumulatedTurnTextRef.current = "";
+              setMessageInput("");
+
+              // Teardown recognition briefly so Chrome resets its speech buffer
               if (recognitionRef.current) {
                 try {
                   recognitionRef.current.onresult = null;
@@ -294,11 +298,20 @@ export default function SwitchboardPage() {
                 } catch (_) {}
                 recognitionRef.current = null;
               }
-              accumulatedTurnTextRef.current = "";
-              setMessageInput("");
+
               handleSendMessage(toSend);
+
+              // Immediately schedule recognition restart after short buffer flush delay
+              if (isListeningRef.current && !switchboardAudioQueue.isPlaying) {
+                if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
+                restartTimeoutRef.current = setTimeout(() => {
+                  if (isListeningRef.current && !switchboardAudioQueue.isPlaying) {
+                    startRecognition();
+                  }
+                }, 350);
+              }
             }
-          }, 650);
+          }, 950);
         }
       };
 
@@ -317,25 +330,21 @@ export default function SwitchboardPage() {
           if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
           restartTimeoutRef.current = setTimeout(() => {
             if (isListeningRef.current && !switchboardAudioQueue.isPlaying) startRecognition();
-          }, 250);
+          }, 300);
         }
       };
 
       recognition.onend = () => {
         setIsSpeaking(false);
-        // On natural end (browser auto-closes after silence), restart with a longer
-        // delay (400ms) so Chrome's internal buffer fully flushes before the new
-        // session begins — this prevents the new session from re-firing stale results.
+        // On natural end (browser silence timeout), restart cleanly
         if (isListeningRef.current && !switchboardAudioQueue.isPlaying) {
           if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
           restartTimeoutRef.current = setTimeout(() => {
             if (isListeningRef.current && !switchboardAudioQueue.isPlaying) {
-              // Always clear the accumulated buffer before restarting so previous
-              // utterances don't bleed into the next recognition session.
               accumulatedTurnTextRef.current = "";
               startRecognition();
             }
-          }, 400);
+          }, 350);
         }
       };
 
@@ -443,27 +452,25 @@ export default function SwitchboardPage() {
             const raw = msg.data || msg;
             const text = (raw.text || "").trim();
             const speaker = raw.speaker || "agent";
+            if (!text) return;
+
             setTranscript((prev) => {
               const last = prev[prev.length - 1];
+              // Deduplicate identical consecutive utterance from the SAME speaker
               if (last && last.speaker === speaker && last.text.trim().toLowerCase() === text.toLowerCase()) {
-                return prev; // Deduplicate consecutive identical utterances
+                return prev;
               }
+              // Deduplicate by ID
               if (raw.id && prev.some((u) => u.id === raw.id)) {
                 return prev;
               }
-              // Guard: In a live 2-way call, AI Advocate ('user') should never send two consecutive turns.
-              // If the last utterance is already from 'user' and new utterance is also from 'user',
-              // update/replace the last turn rather than stacking a duplicate introduction!
-              if (speaker === "user" && last && last.speaker === "user") {
+              // If operator message arrived from server and matches an optimistic temp message, update its ID
+              if (speaker === "agent" && last && last.speaker === "agent" && last.id.startsWith("op-") && last.text.trim().toLowerCase() === text.toLowerCase()) {
                 const updated = [...prev];
-                updated[updated.length - 1] = {
-                  ...last,
-                  id: raw.id || last.id,
-                  text,
-                  thought_process: raw.thought_process || (last as any).thought_process,
-                };
+                updated[updated.length - 1] = { ...last, id: raw.id || last.id };
                 return updated;
               }
+
               return [
                 ...prev,
                 {
@@ -486,8 +493,31 @@ export default function SwitchboardPage() {
               switchboardAudioQueue.enqueue(raw.audio_b64 as string);
             }
           } else if (msg.type === "audio_patch") {
-            // TTS audio for the already-displayed advocate utterance arrives here.
-            // Enqueue for sequential playback; the SequentialAudioQueue handles mic muting via onStateChange.
+            // TTS audio for the advocate utterance arrives here.
+            // If Shivani's text utterance was somehow missed or delayed, append it now so text is NEVER missing when audio plays!
+            const patchId = msg.utterance_id;
+            const patchText = msg.text;
+            if (patchText) {
+              setTranscript((prev) => {
+                if (patchId && prev.some((u) => u.id === patchId)) return prev;
+                const last = prev[prev.length - 1];
+                if (last && last.speaker === "user" && last.text.trim().toLowerCase() === patchText.trim().toLowerCase()) {
+                  return prev;
+                }
+                return [
+                  ...prev,
+                  {
+                    id: patchId || `u-${Date.now()}`,
+                    speaker: "user",
+                    text: patchText,
+                    thought_process: msg.thought_process,
+                    isFinal: true,
+                    sequence: Date.now(),
+                  },
+                ];
+              });
+            }
+
             if (msg.audio_b64) {
               switchboardAudioQueue.enqueue(msg.audio_b64 as string);
             }
@@ -552,7 +582,12 @@ export default function SwitchboardPage() {
         ...item,
         call: { ...item.call, status: "active" },
       });
-      setTranscript([]);
+      try {
+        const existing = await callsApi.getUtterances(item.call.id);
+        setTranscript(existing || []);
+      } catch {
+        setTranscript([]);
+      }
       setLastPromise(null);
       setRefusalDetected(null);
       fetchPending();
@@ -568,11 +603,11 @@ export default function SwitchboardPage() {
     const textToSend = deduplicateConsecutivePhrases(raw);
     if (!textToSend) return;
 
-    // Production-level deduplication: prevent identical submissions within 1.5 seconds
+    // Production-level deduplication: prevent identical submissions within 1.0 second
     const now = Date.now();
     if (
       textToSend.toLowerCase() === lastSentTextRef.current.toLowerCase() &&
-      now - lastSentTimeRef.current < 1500
+      now - lastSentTimeRef.current < 1000
     ) {
       return;
     }
@@ -583,6 +618,25 @@ export default function SwitchboardPage() {
     setMessageInput("");
     accumulatedTurnTextRef.current = "";
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+
+    // Optimistically append operator's message with temporary ID so it renders with 0 latency
+    const tempOpId = `op-${Date.now()}`;
+    setTranscript((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && last.speaker === "agent" && last.text.trim().toLowerCase() === textToSend.toLowerCase()) {
+        return prev;
+      }
+      return [
+        ...prev,
+        {
+          id: tempOpId,
+          speaker: "agent",
+          text: textToSend,
+          isFinal: true,
+          sequence: Date.now(),
+        },
+      ];
+    });
 
     // Stop current recognition cleanly so Chrome resets its internal buffer for next turn
     if (recognitionRef.current && isListeningRef.current) {
@@ -970,6 +1024,18 @@ export default function SwitchboardPage() {
                     <button
                       onClick={() =>
                         handleSendMessage(
+                          "Have you got the consent from your owner?"
+                        )
+                      }
+                      disabled={sending}
+                      className="px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/40 text-[11px] text-purple-200 transition-all font-semibold flex items-center gap-1"
+                      title="Tests Shivani's legal authorization & owner biometric consent"
+                    >
+                      🛡️ Ask: "Have you got consent from your owner?"
+                    </button>
+                    <button
+                      onClick={() =>
+                        handleSendMessage(
                           "Disputed bill ka amount kitna hai?"
                         )
                       }
@@ -1105,6 +1171,27 @@ export default function SwitchboardPage() {
                     title="When enabled, your spoken words are automatically sent when you stop speaking"
                   >
                     {autoSendVoice ? "Auto-Send On" : "Manual"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = speechLang === "hi-IN" ? "en-IN" : "hi-IN";
+                      setSpeechLang(next);
+                      if (recognitionRef.current) {
+                        try {
+                          recognitionRef.current.lang = next;
+                        } catch {}
+                      }
+                    }}
+                    className={`px-2 py-2 rounded-xl text-[10px] font-bold border transition-all ${
+                      speechLang === "hi-IN"
+                        ? "bg-amber-500/15 border-amber-500/30 text-amber-300"
+                        : "bg-blue-500/15 border-blue-500/30 text-blue-300"
+                    }`}
+                    title="Toggle voice recognition language for representative speech"
+                  >
+                    {speechLang === "hi-IN" ? "🇮🇳 हिन्दी / Hinglish" : "🌐 English"}
                   </button>
 
                   <input

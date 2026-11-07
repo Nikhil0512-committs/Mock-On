@@ -532,6 +532,8 @@ async def send_call_message(
                             await manager.broadcast(call_id, {
                                 "type": "audio_patch",
                                 "utterance_id": adv_id,
+                                "text": advocate_text,
+                                "thought_process": thought_process,
                                 "audio_b64": adv_audio,
                             })
                         except Exception as e:
@@ -592,6 +594,26 @@ async def get_call(call_id: str, db: AsyncSession = Depends(get_db)):
     if not call:
         raise HTTPException(404, "Call not found")
     return call
+
+
+@router.get("/{call_id}/utterances")
+async def get_call_utterances(call_id: str, db: AsyncSession = Depends(get_db)):
+    """Fetches all stored utterances for a given call in chronological sequence."""
+    result = await db.execute(
+        select(Utterance)
+        .where(Utterance.call_id == call_id)
+        .order_by(Utterance.sequence_num.asc(), Utterance.created_at.asc())
+    )
+    return [
+        {
+            "id": u.id,
+            "speaker": u.speaker_role,
+            "text": u.raw_text or u.normalised_text,
+            "isFinal": True,
+            "sequence": u.sequence_num,
+        }
+        for u in result.scalars().all()
+    ]
 
 
 class EndCallPayload(BaseModel):

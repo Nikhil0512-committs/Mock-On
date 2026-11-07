@@ -80,7 +80,7 @@ export const WS_BASE = API_BASE.replace(/^http/, "ws");
 
 // ── Typed API helpers ────────────────────────────────────────────────────
 
-import type { Case, Call, Promise as HPromise, PromiseEvent, User } from "../types";
+import type { Case, Call, Promise as HPromise, PromiseEvent, User, LiveUtterance } from "../types";
 
 export interface SwitchboardPendingItem {
   call: Call;
@@ -184,6 +184,8 @@ export const callsApi = {
         data
       )
       .then((r) => r.data),
+  getUtterances: (callId: string) =>
+    api.get<LiveUtterance[]>(`/calls/${callId}/utterances`).then((r) => r.data),
 };
 
 export const promisesApi = {
