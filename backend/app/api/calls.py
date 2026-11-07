@@ -526,28 +526,28 @@ async def send_call_message(
                     except Exception as e:
                         logger.debug(f"Advocate TTS synthesis failed (text already delivered): {e}")
 
-                        # ── AUTONOMOUS CALL TERMINATION ON CONFIRMED REFUND ──────────────
-                        # When a refund or settlement commitment is detected from the representative,
-                        # the AI Personal Agent autonomously locks the commitment into the ledger
-                        # and concludes the call automatically without requiring manual hangup.
-                        if promise_detected:
-                            logger.info(
-                                f"Autonomous Agent: Refund commitment logged on call {call_id}. "
-                                "Scheduling automatic call conclusion after concluding turn."
-                            )
-                            async def auto_conclude_after_turn():
-                                # Allow time for Shivani's concluding utterance and TTS audio to play
-                                await asyncio.sleep(3.5)
-                                try:
-                                    await execute_call_end(
-                                        call_id,
-                                        reason="Autonomous Resolution: Settlement commitment confirmed by representative",
-                                    )
-                                    logger.info(f"Autonomous Agent successfully concluded call {call_id}.")
-                                except Exception as auto_end_err:
-                                    logger.error(f"Error during autonomous call conclusion: {auto_end_err}", exc_info=True)
+                    # ── AUTONOMOUS CALL TERMINATION ON CONFIRMED REFUND ──────────────
+                    # When a refund or settlement commitment is detected from the representative,
+                    # the AI Personal Agent autonomously locks the commitment into the ledger
+                    # and concludes the call automatically without requiring manual hangup.
+                    if promise_detected:
+                        logger.info(
+                            f"Autonomous Agent: Refund commitment logged on call {call_id}. "
+                            "Scheduling automatic call conclusion after concluding turn."
+                        )
+                        async def auto_conclude_after_turn():
+                            # Allow time for Shivani's concluding utterance and TTS audio to play
+                            await asyncio.sleep(3.5)
+                            try:
+                                await execute_call_end(
+                                    call_id,
+                                    reason="Autonomous Resolution: Settlement commitment confirmed by representative",
+                                )
+                                logger.info(f"Autonomous Agent successfully concluded call {call_id}.")
+                            except Exception as auto_end_err:
+                                logger.error(f"Error during autonomous call conclusion: {auto_end_err}", exc_info=True)
 
-                            asyncio.create_task(auto_conclude_after_turn())
+                        asyncio.create_task(auto_conclude_after_turn())
                 except Exception as adv_err:
                     logger.error(f"Error generating advocate reply on call {call_id}: {adv_err}", exc_info=True)
 

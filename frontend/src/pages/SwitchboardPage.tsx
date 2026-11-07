@@ -173,6 +173,7 @@ export default function SwitchboardPage() {
   const { currentUser } = useStore();
   const [pendingCalls, setPendingCalls] = useState<SwitchboardPendingItem[]>([]);
   const [activeCallItem, setActiveCallItem] = useState<SwitchboardPendingItem | null>(null);
+  const activeCallItemRef = useRef<SwitchboardPendingItem | null>(null);
   const operatorName = currentUser?.full_name || "Tata / Airtel Support Specialist";
   const [transcript, setTranscript] = useState<LiveUtterance[]>([]);
   const [messageInput, setMessageInput] = useState("");
@@ -181,6 +182,7 @@ export default function SwitchboardPage() {
   const [refusalDetected, setRefusalDetected] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [autoSendVoice, setAutoSendVoice] = useState(true);
+  const autoSendVoiceRef = useRef(true);
   const [speechLang, setSpeechLang] = useState<"hi-IN" | "en-IN">("hi-IN");
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isAdvocateSpeaking, setIsAdvocateSpeaking] = useState(false);
@@ -193,8 +195,12 @@ export default function SwitchboardPage() {
   const isListeningRef = useRef(false);
   const lastSentTextRef = useRef<string>("");
   const lastSentTimeRef = useRef<number>(0);
+  const sendingRef = useRef(false);
   const wsRef = useRef<WebSocket | null>(null);
   const transcriptBottomRef = useRef<HTMLDivElement>(null);
+
+  // Keep refs in sync with state so closures always see the latest values
+  useEffect(() => { activeCallItemRef.current = activeCallItem; }, [activeCallItem]);
 
   // Sync with audio queue state to mute microphone input while AI advocate speaks
   useEffect(() => {
@@ -280,12 +286,13 @@ export default function SwitchboardPage() {
           setIsSpeaking(true);
         }
 
-        // Auto-send debounce after 950ms of natural silence
-        if (autoSendVoice) {
+        // Auto-send: debounce after 950ms of silence.
+        // IMPORTANT: use speechBufferRef.current (always fresh via ref) not captured `interim`
+        if (autoSendVoiceRef.current) {
           if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
           silenceTimerRef.current = setTimeout(() => {
-            const toSend = (speechBufferRef.current + " " + interim).trim();
-            if (toSend.length >= 2) {
+            const toSend = speechBufferRef.current.trim();
+            if (toSend.length >= 2 && !sendingRef.current) {
               speechBufferRef.current = "";
               setMessageInput("");
               setIsSpeaking(false);
@@ -313,6 +320,16 @@ export default function SwitchboardPage() {
       recognition.onend = () => {
         isStartingRef.current = false;
         setIsSpeaking(false);
+
+        // Flush any pending speech buffer that wasn't auto-sent yet
+        if (autoSendVoiceRef.current && speechBufferRef.current.trim().length >= 2 && !sendingRef.current) {
+          const pending = speechBufferRef.current.trim();
+          speechBufferRef.current = "";
+          setMessageInput("");
+          if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+          handleSendMessage(pending);
+        }
+
         // Seamless auto-restart on natural pause/timeout without killing session state
         if (isListeningRef.current && !switchboardAudioQueue.isPlaying && !isAdvocateSpeakingRef.current) {
           if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
@@ -476,16 +493,29 @@ export default function SwitchboardPage() {
             }
           } else if (msg.type === "audio_patch") {
             // TTS audio for the advocate utterance arrives here.
-            // If Shivani's text utterance was somehow missed or delayed, append it now so text is NEVER missing when audio plays!
+            // Ensure Shivani's text appears in transcript — the utterance event may have
+            // arrived first (with same ID), or it may have been missed entirely.
             const patchId = msg.utterance_id;
             const patchText = msg.text;
             if (patchText) {
               setTranscript((prev) => {
-                if (patchId && prev.some((u) => u.id === patchId)) return prev;
+                // If utterance already exists by ID, update its thought_process if missing
+                const existingIdx = patchId ? prev.findIndex((u) => u.id === patchId) : -1;
+                if (existingIdx >= 0) {
+                  // Already present — update thought_process if it was missing
+                  if (msg.thought_process && !prev[existingIdx].thought_process) {
+                    const updated = [...prev];
+                    updated[existingIdx] = { ...updated[existingIdx], thought_process: msg.thought_process };
+                    return updated;
+                  }
+                  return prev;
+                }
+                // Check if the exact same text from "user" (Shivani) already exists at tail
                 const last = prev[prev.length - 1];
                 if (last && last.speaker === "user" && last.text.trim().toLowerCase() === patchText.trim().toLowerCase()) {
                   return prev;
                 }
+                // Text is genuinely missing — insert it now so transcript is always visible
                 return [
                   ...prev,
                   {
@@ -579,8 +609,12 @@ export default function SwitchboardPage() {
   };
 
   const handleSendMessage = async (customText?: string) => {
-    const raw = (customText || messageInput || speechBufferRef.current).trim();
-    if (!raw || !activeCallItem) return;
+    const callItem = activeCallItemRef.current;
+    const raw = (customText || speechBufferRef.current).trim();
+    if (!raw || !callItem) return;
+
+    // Prevent re-entry while a send is already in flight
+    if (sendingRef.current) return;
 
     const textToSend = deduplicateConsecutivePhrases(raw);
     if (!textToSend) return;
@@ -620,9 +654,10 @@ export default function SwitchboardPage() {
       ];
     });
 
+    sendingRef.current = true;
     setSending(true);
     try {
-      const res = await callsApi.sendCallMessage(activeCallItem.call.id, {
+      const res = await callsApi.sendCallMessage(callItem.call.id, {
         speaker: "agent",
         text: textToSend,
         auto_advocate_reply: true,
@@ -632,8 +667,8 @@ export default function SwitchboardPage() {
       }
     } catch (err) {
       console.error("Failed to send message over call:", err);
-      alert("Failed to deliver message over call. Please retry.");
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   };
@@ -1108,7 +1143,10 @@ export default function SwitchboardPage() {
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
-                    handleSendMessage();
+                    const typed = messageInput.trim();
+                    if (typed) {
+                      handleSendMessage(typed);
+                    }
                   }}
                   className="flex items-center gap-2 pt-1"
                 >
@@ -1137,7 +1175,7 @@ export default function SwitchboardPage() {
 
                   <button
                     type="button"
-                    onClick={() => setAutoSendVoice(!autoSendVoice)}
+                    onClick={() => { setAutoSendVoice(!autoSendVoice); autoSendVoiceRef.current = !autoSendVoice; }}
                     className={`px-2 py-2 rounded-xl text-[10px] font-bold border transition-all ${
                       autoSendVoice
                         ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
