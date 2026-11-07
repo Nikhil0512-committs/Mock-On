@@ -1004,6 +1004,8 @@ export default function CallPage() {
                         ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
                         : evasionRadar?.tactic === "coupon_diversion"
                         ? "bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse"
+                        : evasionRadar?.tactic === "stall_no_date"
+                        ? "bg-amber-500/25 text-amber-300 border-amber-500/50 animate-pulse ring-1 ring-amber-400/40"
                         : evasionRadar?.tactic === "explicit_refusal"
                         ? "bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse"
                         : "bg-blue-500/20 text-blue-300 border-blue-500/40"
@@ -1013,7 +1015,7 @@ export default function CallPage() {
                   </span>
                 </div>
 
-                {/* Dynamic Segmented Gauge */}
+                {/* Dynamic Precision Gauge with Sweeping Radar Needle */}
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-[11px] font-semibold">
                     <span className="text-white/50">Binding Certainty</span>
@@ -1029,31 +1031,51 @@ export default function CallPage() {
                       {evasionRadar ? `${evasionRadar.score}%` : "50% Neutral"}
                     </span>
                   </div>
-                  <div className="w-full bg-white/[0.06] rounded-full h-2 overflow-hidden flex">
+
+                  <div className="relative w-full bg-white/[0.06] rounded-full h-3 overflow-visible my-1 flex items-center">
+                    {/* Gradient background track representing Evasion -> Neutral -> Binding Promise zones */}
+                    <div className="w-full h-full rounded-full bg-gradient-to-r from-rose-600 via-amber-500 to-emerald-500 opacity-25" />
+
+                    {/* Active filled bar */}
                     <div
-                      className={`h-full transition-all duration-500 rounded-full ${
+                      className={`absolute inset-y-0 left-0 transition-all duration-700 ease-out rounded-full ${
                         (evasionRadar?.score ?? 50) >= 75
-                          ? "bg-gradient-to-r from-emerald-500 to-teal-400 shadow-emerald-500/50"
+                          ? "bg-gradient-to-r from-emerald-500 to-teal-400 shadow-[0_0_12px_rgba(16,185,129,0.5)]"
                           : (evasionRadar?.score ?? 50) >= 30
-                          ? "bg-gradient-to-r from-amber-500 to-yellow-400 shadow-amber-500/50"
-                          : "bg-gradient-to-r from-rose-600 to-red-500 shadow-rose-500/50"
+                          ? "bg-gradient-to-r from-amber-500 to-yellow-400 shadow-[0_0_12px_rgba(245,158,11,0.5)]"
+                          : "bg-gradient-to-r from-rose-600 to-red-500 shadow-[0_0_12px_rgba(239,68,68,0.5)]"
                       }`}
                       style={{ width: `${evasionRadar?.score ?? 50}%` }}
                     />
+
+                    {/* Radar Needle Indicator that visibly whips into position */}
+                    <div
+                      className="absolute -top-1 -bottom-1 w-2.5 -ml-1.5 bg-white rounded-full shadow-[0_0_12px_#fff,0_0_20px_#38bdf8] transition-all duration-700 ease-out z-10 flex items-center justify-center pointer-events-none"
+                      style={{ left: `${evasionRadar?.score ?? 50}%` }}
+                    >
+                      <div className="w-1 h-3 rounded-full bg-slate-950" />
+                    </div>
                   </div>
+
                   <div className="flex justify-between text-[9px] text-white/30 font-mono">
-                    <span>0% Evasion / Refusal</span>
+                    <span className={evasionRadar?.tactic === "stall_no_date" ? "text-amber-300 font-bold animate-pulse" : ""}>
+                      0% Stall / Evasion
+                    </span>
                     <span>50% Inquiry</span>
-                    <span>100% Firm Promise</span>
+                    <span className={evasionRadar?.tactic === "firm_commitment" ? "text-emerald-300 font-bold" : ""}>
+                      100% Firm Promise
+                    </span>
                   </div>
                 </div>
 
                 {/* Real-time Tactic & Counter-Action Dossier */}
                 {evasionRadar ? (
                   <div
-                    className={`p-2.5 rounded-xl text-xs space-y-1.5 border ${
+                    className={`p-2.5 rounded-xl text-xs space-y-1.5 border transition-all ${
                       evasionRadar.tactic === "coupon_diversion"
                         ? "bg-amber-500/10 border-amber-500/30 text-amber-200"
+                        : evasionRadar.tactic === "stall_no_date"
+                        ? "bg-amber-500/15 border-amber-500/40 text-amber-200 shadow-lg shadow-amber-500/10 ring-1 ring-amber-400/30"
                         : evasionRadar.tactic === "firm_commitment"
                         ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-200"
                         : evasionRadar.tactic === "explicit_refusal"
@@ -1067,7 +1089,7 @@ export default function CallPage() {
                     </div>
                     <p className="text-[11px] leading-relaxed opacity-90">{evasionRadar.summary}</p>
                     <div className="pt-1 border-t border-white/10 text-[10px] text-white/90 font-mono">
-                      <strong className="text-brand-300">AI Assistant Action:</strong> {evasionRadar.counter_action}
+                      <strong className="text-brand-300">AI Personal Assistant Action:</strong> {evasionRadar.counter_action}
                     </div>
                   </div>
                 ) : (

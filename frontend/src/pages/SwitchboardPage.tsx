@@ -981,6 +981,41 @@ export default function SwitchboardPage() {
                     <button
                       onClick={() =>
                         handleSendMessage(
+                          "Ma'am, we are looking into it, please wait."
+                        )
+                      }
+                      disabled={sending}
+                      className="px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-[11px] text-amber-300 transition-all font-semibold shadow-sm flex items-center gap-1.5"
+                      title="Triggers Evasion Radar Stall detection"
+                    >
+                      ⏱️ Stall: "Ma'am, we are looking into it, please wait."
+                    </button>
+                    <button
+                      onClick={() =>
+                        handleSendMessage(
+                          "Ticket four eight two one. Paanch working days mein ₹four hundred twenty-two refund ho jayega."
+                        )
+                      }
+                      disabled={sending}
+                      className="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-[11px] text-emerald-300 transition-all font-semibold shadow-sm flex items-center gap-1.5"
+                      title="Triggers statutory commitment extraction and confirmation"
+                    >
+                      ✅ Commit: "Ticket 4821, ₹422 in 5 days"
+                    </button>
+                    <button
+                      onClick={() =>
+                        handleSendMessage(
+                          "Sir/Ma'am, we cannot refund cash to your account. Instead, we can credit a ₹500 discount coupon to your wallet for next month's recharge."
+                        )
+                      }
+                      disabled={sending}
+                      className="px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-[11px] text-purple-300 transition-all font-medium"
+                    >
+                      🎁 Coupon Diversion
+                    </button>
+                    <button
+                      onClick={() =>
+                        handleSendMessage(
                           "Under company billing policy, provisional reading adjustments cannot be approved without a paid inspection fee. We cannot refund or adjust this charge."
                         )
                       }
@@ -988,17 +1023,6 @@ export default function SwitchboardPage() {
                       className="px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-[11px] text-rose-300 transition-all font-medium"
                     >
                       ❌ Refuse Refund (Policy Denial)
-                    </button>
-                    <button
-                      onClick={() =>
-                        handleSendMessage(
-                          `We have verified your grievance. We will issue a full refund of ₹${(activeCallItem.case.approved_info as any)?.disputed_amount || "8,500"} directly to your bank account within 3 working days.`
-                        )
-                      }
-                      disabled={sending}
-                      className="px-2.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-[11px] text-emerald-300 transition-all font-medium"
-                    >
-                      ✅ Commit Full Refund (3 Days)
                     </button>
                   </div>
                 </div>
