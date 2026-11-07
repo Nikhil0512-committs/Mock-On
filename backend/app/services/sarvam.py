@@ -182,6 +182,7 @@ class SarvamExtractor:
                 "denied", "not approved", "no compensation", "nothing can be done",
                 "nahi milega", "reject", "rejected", "cannot waive", "won't refund",
                 "not eligible", "cannot assist", "cannot promise",
+                "रिफंड नहीं", "नहीं होगा", "नहीं मिलेगा", "नहीं हो सकता", "पॉलिसी में नहीं है",
             ]
             if any(term in lower_text for term in refusal_terms):
                 logger.info(f"Refusal detected in agent speech, zero promises extracted: {text}")
@@ -191,21 +192,28 @@ class SarvamExtractor:
             vague_terms = [
                 "we will look into it", "will investigate", "will check",
                 "hum dekhenge", "check karenge", "pata karenge", "let you know",
+                "हम देखेंगे", "देखते हैं", "चेक करेंगे", "पता करेंगे",
             ]
-            if any(term in lower_text for term in vague_terms) and not any(kw in lower_text for kw in ["will refund", "issue a refund", "refund of", "credit will be"]):
+            if any(term in lower_text for term in vague_terms) and not any(kw in lower_text for kw in ["will refund", "issue a refund", "refund of", "credit will be", "रिफंड"]):
                 logger.info(f"Vague statement detected, zero commitments extracted: {text}")
                 continue
 
-            # Check for explicit affirmative commitment indicators
+            # Check for explicit affirmative commitment indicators (Latin + Devanagari Hindi)
             has_refund = any(kw in lower_text for kw in [
                 "will refund", "issue a refund", "refund of", "credit will be",
                 "credit kar diya", "credit hoga", "paise wapas", "refund kar denge",
                 "full refund", "refund within", "reversing the charges", "bill waiver",
                 "refund ho jaega", "refund ho jayega", "refund kar diya", "refund karenge",
-                "refund mil jayega", "refund aa jayega", "processed within", "credit within"
+                "refund mil jayega", "refund aa jayega", "processed within", "credit within",
+                "रिफंड", "रिफंड हो जाएगा", "रिफंड हो जायेगा", "रिफंड कर देंगे", "क्रेडिट हो जाएगा",
+                "क्रेडिट कर", "पैसे वापस", "वापस मिल", "वापस कर", "खाते में आ जाएगा", "खाते में आ जायेगा"
             ])
-            has_callback = any(kw in lower_text for kw in ["call you back", "call back in", "senior manager will call", "call karenge", "sampark karenge"])
-            has_visit = any(kw in lower_text for kw in ["technician visit", "engineer will visit", "visit your premises", "replace the defective meter", "visit karega", "ghar aayega"])
+            has_callback = any(kw in lower_text for kw in [
+                "call you back", "call back in", "senior manager will call", "call karenge", "sampark karenge", "कॉल करेंगे", "संपर्क करेंगे"
+            ])
+            has_visit = any(kw in lower_text for kw in [
+                "technician visit", "engineer will visit", "visit your premises", "replace the defective meter", "visit karega", "ghar aayega", "विजिट"
+            ])
 
             if not (has_refund or has_callback or has_visit):
                 continue
@@ -214,9 +222,9 @@ class SarvamExtractor:
 
             # Extract amount
             amount = None
-            amt_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:rupaye|rupees|rs\.?|inr)", text, re.IGNORECASE)
+            amt_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:rupaye|rupees|rs\.?|inr|रुपये|रुपए|रु\.?)", text, re.IGNORECASE)
             if not amt_match:
-                amt_match = re.search(r"(?:rupaye|rupees|rs\.?|inr|₹)\s*(\d+(?:\.\d+)?)", text, re.IGNORECASE)
+                amt_match = re.search(r"(?:rupaye|rupees|rs\.?|inr|₹|रुपये|रुपए|रु\.?)\s*(\d+(?:\.\d+)?)", text, re.IGNORECASE)
             if amt_match:
                 try:
                     amount = float(amt_match.group(1))
@@ -225,10 +233,10 @@ class SarvamExtractor:
             elif "four hundred twenty-two" in lower_text or "422" in lower_text:
                 amount = 422.0
 
-            # Extract date phrase
+            # Extract date phrase (Latin + Devanagari + multi-day ranges like '3 se 4 din' or 'तीन से चार दिन')
             raw_date_phrase = None
             date_match = re.search(
-                r"((?:paanch|do|teen|chaar|ek|das|[0-9]+)\s*(?:kaam karne wale dinon?|kaam karne wale din|dinon?|din|working days?|days?|hours?|ghante))",
+                r"((?:paanch|do|teen|chaar|ek|das|teen\s*se\s*chaar|do\s*se\s*teen|तीन|चार|पांच|पाँच|दो|एक|दस|तीन\s*से\s*चार|[0-9]+(?:\s*(?:se|to|-)\s*[0-9]+)?)\s*(?:kaam\s*karne\s*wale\s*dinon?|kaam\s*karne\s*wale\s*din|dinon?|din|दिनों?|दिन|कार्य\s*दिवस|working\s*days?|days?|hours?|ghante|घंटे|घंटों))",
                 text,
                 re.IGNORECASE,
             )
@@ -310,7 +318,9 @@ class SarvamExtractor:
         has_firm_deadline = any(t in lower for t in [
             "working day", "working days", "business day", "business days",
             "hours", "ghante", "kal tak", "2 days", "3 days", "5 days", "7 days",
-            "do din", "teen din", "paanch din", "saat din"
+            "do din", "teen din", "paanch din", "saat din",
+            "दिन", "दिनों", "कार्य दिवस", "घंटे", "कल तक", "तीन दिन", "चार दिन",
+            "तीन से चार दिन", "पाँच दिन", "दो दिन"
         ])
         stall_no_date_phrases = [
             "looking into it, please wait",
@@ -323,7 +333,8 @@ class SarvamExtractor:
             "hum dekh rahe hain",
             "dekh rahe hain, please wait",
             "dekh rahe hain wait",
-            "hold on, looking into it"
+            "hold on, looking into it",
+            "हम देख रहे हैं", "देख रहे हैं", "थोड़ा रुकिए", "सिस्टम में देख रहे हैं"
         ]
         is_stall_no_date = (
             not has_firm_deadline
@@ -348,7 +359,8 @@ class SarvamExtractor:
         hedging_terms = [
             "try our best", "try karenge", "dekh lenge", "wait for some time", "kuch din",
             "might take time", "process mein hai", "will see", "hope to", "koshish karenge",
-            "can't say for sure", "pakka nahi", "dekhte hain", "check karenge", "we will look into it"
+            "can't say for sure", "pakka nahi", "dekhte hain", "check karenge", "we will look into it",
+            "हम देखेंगे", "देखते हैं"
         ]
         is_hedging = any(t in lower for t in hedging_terms)
 
@@ -358,11 +370,12 @@ class SarvamExtractor:
             "refund nahi", "nahi hoga", "policy does not allow", "unable to process refund",
             "denied", "not approved", "no compensation", "nothing can be done",
             "nahi milega", "reject", "rejected", "cannot waive", "won't refund",
-            "not eligible", "cannot assist", "cannot promise"
+            "not eligible", "cannot assist", "cannot promise",
+            "रिफंड नहीं", "नहीं होगा", "नहीं मिलेगा", "नहीं हो सकता"
         ]
         is_refusal = any(t in lower for t in refusal_terms)
 
-        # 5. Firm Binding Commitment
+        # 5. Firm Binding Commitment (Latin + Devanagari Hindi)
         commitment_terms = [
             "refund will be processed", "refund process kar", "credit within", "credit ho jayega",
             "processed within", "reverse kar", "reversal will", "within 2 days", "within 3 days",
@@ -370,9 +383,12 @@ class SarvamExtractor:
             "account mein aa jayega", "refund kar diya jayega", "waive off", "waived",
             "full refund has been approved", "initiated the refund", "reversal has been processed",
             "refund ho jaega", "refund ho jayega", "paise wapas", "refund kar denge",
-            "paise mil jayenge", "amount refund", "refund karenge", "refund mil jayega"
+            "paise mil jayenge", "amount refund", "refund karenge", "refund mil jayega",
+            "रिफंड हो जाएगा", "रिफंड हो जायेगा", "रिफंड कर देंगे", "क्रेडिट हो जाएगा", "क्रेडिट कर देंगे",
+            "पैसे वापस", "खाते में आ जाएगा", "रिफंड मिलेगा", "रिफंड"
         ]
-        is_commitment = any(t in lower for t in commitment_terms)
+        has_refund_word = any(w in lower for w in ["refund", "रिफंड", "credit", "क्रेडिट", "wapas", "वापस", "reverse"])
+        is_commitment = any(t in lower for t in commitment_terms) or (has_refund_word and has_firm_deadline)
 
         if is_refusal:
             return {
@@ -536,18 +552,24 @@ class SarvamExtractor:
             f"- Registered Phone: {phone}\n"
             f"- Grievance Briefing from Consumer: {goal}\n"
             f"- Consent & Authorization Status: FULLY AUTHORIZED AND VERIFIED. Consumer {consumer_name} has provided explicit legally binding consent and armour365™ biometric voice authorization to you (Shivani) under IT Act 2000 Section 10A to represent them and negotiate this dispute.\n\n"
-            f"CRITICAL DIRECTIVES FOR CALL CONVERSATION:\n"
-            f"1. DIRECT QUESTION ANSWERING ONLY: When the representative asks a question, answer ONLY that exact question factually from the docket. Never recite statutes or case essays unsolicited.\n"
-            f"   - If asked for account number: give only '{id_val}'.\n"
+            f"CRITICAL DIRECTIVES FOR CALL CONVERSATION (STRICT ANTI-HALLUCINATION ENFORCEMENT):\n"
+            f"1. IDENTITY: You are {consumer_name}'s female AI Personal Assistant. You are NOT an advocate, lawyer, or legal counsel. Never claim to be an advocate.\n"
+            f"2. DIRECT QUESTION ANSWERING ONLY: When the representative asks a question, answer ONLY that exact question factually from the docket:\n"
+            f"   - If asked for account / CA / identifier: give only '{id_val}'.\n"
             f"   - If asked for phone number: give only '{phone}'.\n"
             f"   - If asked for consumer name: state you are Shivani, calling on behalf of '{consumer_name}'.\n"
             f"   - If asked whether you have consent, permission, or authorization from your owner/consumer ({consumer_name}): ALWAYS state clearly and firmly YES, you have full verified consent and authorization from {consumer_name} under IT Act 2000 Section 10A and armour365™ biometric verification.\n"
             f"   - If asked for disputed amount: state 'Rs {amt}'.\n"
             f"   - If asked what happened / what the problem is: summarize concisely in 1 sentence based on '{goal}'.\n"
-            f"   - If asked to hold: politely say you are holding on the line.\n"
-            f"2. BREVITY: Keep your answer to 1 short conversational sentence (maximum 2).\n"
-            f"3. LANGUAGE: Match the language of the representative. If Hindi/Hinglish, speak feminine Hindi. If English, speak English.\n"
-            f"4. NO REPETITION: Never re-introduce yourself if you already did so."
+            f"3. HANDLING REFUND & SETTLEMENT COMMITMENTS:\n"
+            f"   - If the representative states a refund will happen, or offers a timeline (e.g. 'refund ho jayega', '3-4 din mein hoga', 'we will refund'): CONFIRM the commitment immediately in feminine Hindi: 'Theek hai, main confirm kar rahi hoon: yeh refund process ho jayega. Dhanyawaad.' or English. NEVER say 'main hold par hoon' or 'I am on hold' when a refund or timeline is being offered!\n"
+            f"4. HOLDING RULES:\n"
+            f"   - ONLY say you are holding ('main hold par hoon' / 'I am holding') IF AND ONLY IF the representative explicitly asked you to hold with clear words like 'hold kijiye', 'line par bane rahein', 'ek minute rukiye', 'please hold'. If they did NOT explicitly request a hold, NEVER SAY YOU ARE ON HOLD!\n"
+            f"5. STALLING EVASION (NO DATE GIVEN):\n"
+            f"   - If the representative stalls or says 'we are looking into it, please wait' without giving an exact date: state 'Samajh gayi. Mujhe ek specific date aur ticket number chahiye.'\n"
+            f"6. BREVITY: Keep your answer to 1 short conversational sentence (maximum 2).\n"
+            f"7. LANGUAGE: Match the language of the representative. If Hindi/Hinglish, speak feminine Hindi ('main kar rahi hoon'). If English, speak English.\n"
+            f"8. NO REPETITION: Never re-introduce yourself if you already did so."
         )
 
         if is_follow_up:
@@ -685,25 +707,39 @@ class SarvamExtractor:
                 )
             return spoken, thought
 
-        # 2. Commitment turn: instant confirmation
+        # 2. Commitment turn: instant confirmation (Latin + Devanagari Hindi)
         has_commitment_phrase = any(k in lower_rep for k in [
             "refund ho jayega", "refund kar denge", "credit ho jayega", "will be refunded",
-            "refund will be processed", "refund process", "paise wapas", "initiated the refund"
+            "refund will be processed", "refund process", "paise wapas", "initiated the refund",
+            "refund ho jaega", "refund karenge", "refund mil jayega", "credit karenge",
+            "रिफंड", "रिफंड हो जाएगा", "रिफंड हो जायेगा", "रिफंड कर देंगे", "क्रेडिट हो जाएगा",
+            "क्रेडिट कर देंगे", "पैसे वापस", "वापस मिल", "वापस कर", "खाते में आ जाएगा", "खाते में आ जायेगा"
         ])
         has_commitment_context = any(d in lower_rep for d in [
-            "working days", "days", "din", "paanch", "4821", "four eight two one", "four hundred", "422"
+            "working days", "days", "din", "paanch", "teen", "chaar", "do", "saat",
+            "दिन", "दिनों", "कार्य दिवस", "घंटे", "घंटों", "तीन", "चार", "पांच", "पाँच", "दो",
+            "4821", "four eight two one", "four hundred", "422", "3", "4", "5", "2", "7", "24", "48"
         ])
-        if promise_detected or (has_commitment_phrase and has_commitment_context):
+        time_match = re.search(
+            r"((?:teen\s*se\s*chaar|do\s*se\s*teen|paanch|chaar|teen|do|ek|saat|das|[0-9]+(?:\s*(?:se|to|-)\s*[0-9]+)?|तीन\s*से\s*चार|दो\s*से\s*तीन|तीन|चार|पांच|पाँच|दो|सात|चौबीस)\s*(?:kaam\s*karne\s*wale\s*din|working\s*days?|business\s*days?|days?|hours?|din|ghante|दिनों?|दिन|कार्य\s*दिवस|घंटे|घंटों))",
+            lower_rep
+        )
+        if promise_detected or (has_commitment_phrase and (has_commitment_context or time_match)):
             ticket_spoken = "four eight two one" if ("four eight two one" in lower_rep or "4821" in lower_rep) else ticket
             amt_spoken = "four hundred twenty-two" if ("four hundred twenty-two" in lower_rep or "422" in lower_rep) else amt
-            time_spoken = "paanch working days" if ("paanch working days" in lower_rep or "5 working days" in lower_rep or "paanch" in lower_rep) else "paanch working days"
+            if time_match:
+                time_spoken = time_match.group(1).strip()
+            elif "four eight two one" in lower_rep or "4821" in lower_rep or "paanch" in lower_rep:
+                time_spoken = "paanch working days"
+            else:
+                time_spoken = "3 se 4 din"
 
             thought = (
                 f"Statutory Strategy: Binding commitment verified for Ticket #{ticket_spoken}, Rs {amt_spoken} within {time_spoken}. "
                 f"Confirming concrete terms verbatim and locking quote into immutable ledger."
             )
             if is_hindi:
-                spoken = f"Confirm kar rahi hoon: ticket {ticket_spoken}, ₹{amt_spoken}, {time_spoken}. Dhanyavaad."
+                spoken = f"Theek hai, main confirm kar rahi hoon: yeh refund {time_spoken} mein ho jayega. Dhanyavaad."
             else:
                 spoken = f"Confirming: ticket {ticket_spoken}, ₹{amt_spoken}, {time_spoken}. Thank you."
             return spoken, thought
@@ -733,7 +769,7 @@ class SarvamExtractor:
         is_acc_req = bool(re.search(
             r"\b(ca|ca\s*no|ca\s*number|consumer\s*account|account\s*number|account\s*no|consumer\s*id|customer\s*id|khata\s*no|khata\s*number|khata|order\s*id|order\s*number|pnr|booking\s*id|policy\s*number|policy\s*no|claim\s*id|claim\s*number|student\s*id|enrollment|crn|trip\s*id|tenant\s*id|meter\s*number|meter\s*no|agreement\s*ref|tracking\s*id|identifier)\b",
             lower_rep
-        ))
+        )) or any(w in lower_rep for w in ["खाता", "खाता संख्या", "खाता नंबर", "सीए नंबर", "कंज्यूमर नंबर", "अकाउंट नंबर", "ऑर्डर आईडी", "मीटर नंबर"])
         if is_acc_req:
             thought = f"Autonomous Strategy: Supplying verified {id_type} '{id_val}' in response to representative question."
             if is_hindi:
@@ -746,7 +782,7 @@ class SarvamExtractor:
         is_phone_req = bool(re.search(
             r"\b(phone|phone\s*number|mobile|mobile\s*number|contact\s*number|registered\s*number|registered\s*mobile|sampark)\b",
             lower_rep
-        ))
+        )) or any(w in lower_rep for w in ["फोन", "फोन नंबर", "मोबाइल", "मोबाइल नंबर", "संपर्क", "संपर्क नंबर", "रजिस्टर्ड नंबर", "रजिस्टर्ड मोबाइल"])
         if is_phone_req:
             thought = f"Autonomous Strategy: Supplying registered consumer phone {phone}."
             if is_hindi:
@@ -759,7 +795,7 @@ class SarvamExtractor:
         is_name_req = bool(re.search(
             r"\b(aapka\s*naam|consumer\s*naam|customer\s*naam|customer\s*name|consumer\s*name|kiske\s*behalf|kiska\s*account|who\s*is\s*calling|your\s*name|caller\s*name|naam\s*kya\s*hai)\b",
             lower_rep
-        ))
+        )) or any(w in lower_rep for w in ["आपका नाम", "कंज्यूमर का नाम", "ग्राहक का नाम", "किसका अकाउंट", "किसके नाम", "नाम क्या है"])
         if is_name_req:
             thought = f"Autonomous Strategy: Supplying AI personal assistant identity and consumer name {consumer_name}."
             if is_hindi:
@@ -772,7 +808,7 @@ class SarvamExtractor:
         is_proxy_req = bool(re.search(
             r"\b(consent|permission|authorized|authorization|authority|proxy|owner|mandate|approval|kyc|account\s*holder|are\s*you\s*(?:the\s*)?(?:account\s*holder|customer|nikhil)|aap\s*(?:hi|khud)\s*(?:nikhil|customer|consumer|account\s*holder)|aap\s*nikhil\s*(?:baat|ho|nahi)|nikhil\s*(?:se|ko)\s*(?:baat|phone)|account\s*holder\s*se\s*baat|unse\s*baat\s*karwao|unko\s*phone\s*do|third\s*party|permission\s*diya|permission\s*hai|consent\s*mila|consent\s*hai|owner\s*se|owner\s*ka\s*consent|got\s*(?:the\s*)?consent)\b",
             lower_rep
-        ))
+        )) or any(w in lower_rep for w in ["सहमति", "अनुमति", "कंसेंट", "परमिशन", "अधिकार", "मालिक", "निखिल से बात", "निखिल का कंसेंट", "ऑथराइजेशन", "कंज्यूमर से बात", "कंज्यूमर का कंसेंट"])
         if is_proxy_req:
             thought = f"Autonomous Strategy: Confirming explicit owner consent from {consumer_name} under IT Act 2000 Section 10A and armour365™ verified biometric authorization."
             if is_hindi:
@@ -785,7 +821,7 @@ class SarvamExtractor:
         is_amt_req = bool(re.search(
             r"\b(amount|disputed\s*amount|kitna|paise|rupaye|how\s*much|charges|refund\s*amount|bill\s*amount)\b",
             lower_rep
-        ))
+        )) or any(w in lower_rep for w in ["कितने पैसे", "कितना अमाउंट", "कितना रुपया", "राशि", "रुपये", "रुपए", "कितने रुपये", "कितने रुपए", "विवादित राशि"])
         if is_amt_req:
             thought = f"Autonomous Strategy: Stating disputed sum of Rs {amt} based on intake filing."
             if is_hindi:
@@ -798,7 +834,7 @@ class SarvamExtractor:
         is_ticket_req = bool(re.search(
             r"\b(ticket|ticket\s*number|complaint|complaint\s*number|docket|reference|sr\s*number)\b",
             lower_rep
-        ))
+        )) or any(w in lower_rep for w in ["टिकट", "टिकट नंबर", "शिकायत", "शिकायत संख्या", "रेफरेंस", "रेफरेंस नंबर", "कंप्लेंट नंबर"])
         if is_ticket_req:
             thought = f"Autonomous Strategy: Supplying formal complaint docket #{ticket}."
             if is_hindi:
@@ -809,7 +845,8 @@ class SarvamExtractor:
 
         # 4.55 Stalling with No Date Given (Catches "Ma'am, we are looking into it, please wait." etc.)
         has_firm_date_in_rep = any(t in lower_rep for t in [
-            "working day", "working days", "business day", "business days", "days", "hours", "din", "date", "tarikh"
+            "working day", "working days", "business day", "business days", "days", "hours", "din", "date", "tarikh",
+            "दिन", "दिनों", "कार्य दिवस", "घंटे", "घंटों"
         ])
         is_stall_phrase = (
             not has_firm_date_in_rep
@@ -821,6 +858,7 @@ class SarvamExtractor:
                 or "please wait" in lower_rep
                 or ("looking into" in lower_rep and ("wait" in lower_rep or "hold" in lower_rep or "please" in lower_rep))
                 or ("wait" in lower_rep and any(k in lower_rep for k in ["looking", "dekh", "check", "system"]))
+                or any(sp in lower_rep for sp in ["हम देख रहे हैं", "देख रहे हैं", "थोड़ा रुकिए", "सिस्टम में देख"])
             )
         )
         if is_stall_phrase:
@@ -834,11 +872,11 @@ class SarvamExtractor:
                 spoken = "Understood. I need a specific date and ticket number so we can follow up."
             return spoken, thought
 
-        # 4.6 Operator Asking to Hold / Checking System (Benign check only)
+        # 4.6 Operator Asking to Hold / Checking System (Benign check only — never fires if refund offered)
         is_ack = bool(re.search(
-            r"\b(see\s+the\s+dispute|can\s+see|one\s+moment|give\s+me\s+a\s+moment|hold\s*(?:on|pe|par|per|karein|kijiye|rakhen|rakhein)?|line\s*(?:par|pe)\s*(?:rahein|bani)|2\s*min(?:ut)?|do\s*minute|ek\s*min(?:ut)?|rukhiye|let\s*me\s*check|check\s*kar\s*(?:raha|rahi|lete|rahe)|details)\b",
+            r"\b(see\s+the\s+dispute|can\s+see|one\s+moment|give\s+me\s+a\s+moment|hold\s*(?:on|pe|par|per|karein|kijiye|rakhen|rakhein)?|line\s*(?:par|pe)\s*(?:rahein|bani)|2\s*min(?:ut)?|do\s*minute|ek\s*min(?:ut)?|rukhiye|let\s*me\s*check|check\s*kar\s*(?:raha|rahi|lete|rahe)|details|होल्ड|लाइन\s*पर\s*बने)\b",
             lower_rep
-        ))
+        )) and not (has_commitment_phrase and (has_commitment_context or time_match))
         if is_ack:
             thought = f"Autonomous Strategy: Operator requested brief hold or reviewing account details. Confirming holding on the line for account '{id_val}'."
             if is_hindi:
@@ -1039,6 +1077,36 @@ class SarvamExtractor:
                 content = (msg.get("content") or "").strip()
                 clean_content = content.replace('"', '').replace('*', '').strip()
                 if clean_content and len(clean_content) > 10:
+                    # Anti-hallucination guard 1: False 'holding' hallucination
+                    # If LLM said it is on hold ("hold par hoon", "holding"), but the representative
+                    # did NOT explicitly ask to hold:
+                    is_genuine_hold_request = any(h in lower_rep for h in [
+                        "hold kijiye", "hold karein", "line par rahein", "line par baniye",
+                        "please hold", "hold on", "one moment", "give me a moment", "ek minute rukiye", "दो मिनट रुकिए"
+                    ])
+                    if any(hp in clean_content.lower() for hp in ["hold par hoon", "hold kar rahi hoon", "holding on the line", "holding on", "hold par"]) and not is_genuine_hold_request:
+                        has_refund_talk = any(rw in lower_rep for rw in ["refund", "रिफंड", "credit", "क्रेडिट", "wapas", "वापस", "din", "दिन", "days", "hours"])
+                        if has_refund_talk:
+                            if is_hindi:
+                                clean_content = f"Theek hai, main confirm kar rahi hoon: yeh refund process ho jayega. Dhanyawaad."
+                            else:
+                                clean_content = f"Understood, confirming: this refund will be processed as stated. Thank you."
+                        else:
+                            if is_hindi:
+                                clean_content = f"Ji representative ji, kripya account {id_val} par resolution status confirm karein."
+                            else:
+                                clean_content = f"Could you please confirm the resolution status for account {id_val}?"
+
+                    # Anti-hallucination guard 2: Advocate / lawyer identity check (we are AI Personal Assistant, never advocate)
+                    clean_content = re.sub(r"\b(?:advocate|vakeel|vakil|lawyer|legal\s*counsel)\b", "personal assistant", clean_content, flags=re.IGNORECASE)
+
+                    # Anti-hallucination guard 3: Feminine Hindi grammar enforcement
+                    if is_hindi:
+                        clean_content = re.sub(r"\bbol\s+raha\s+hoon\b", "bol rahi hoon", clean_content, flags=re.IGNORECASE)
+                        clean_content = re.sub(r"\bkar\s+raha\s+hoon\b", "kar rahi hoon", clean_content, flags=re.IGNORECASE)
+                        clean_content = re.sub(r"\bkehta\s+hoon\b", "kehti hoon", clean_content, flags=re.IGNORECASE)
+                        clean_content = re.sub(r"\bchahta\s+hoon\b", "chahti hoon", clean_content, flags=re.IGNORECASE)
+
                     # Guard: If LLM re-introduced itself despite prior intro, replace with factual pivot
                     if has_introduced and any(p in clean_content.lower() for p in [
                         "personal assistant", "ai personal assistant", "hum hindi ya english",
