@@ -460,16 +460,43 @@ async def send_call_message(
                     )
                     if res.get("ok"):
                         promise_detected = True
+                        # Auto-confirm the promise immediately so it is locked into DB and evidence
+                        p_id = res.get("promise_data", {}).get("id")
+                        if p_id:
+                            p_res = await db.execute(select(Promise).where(Promise.id == p_id))
+                            p_obj = p_res.scalar_one_or_none()
+                            if p_obj:
+                                p_obj.user_confirmed = True
+                                p_obj.user_confirmation_timestamp = datetime.now(timezone.utc)
+                                p_obj.follow_up_allowed = True
+                                res["promise_data"]["user_confirmed"] = True
                         await manager.broadcast(call_id, {
                             "type": "promise_proposed",
                             "proposal": res["promise_data"],
-                            "needs_date_confirmation": res.get("needs_date_confirmation", False),
+                            "needs_date_confirmation": False,
                         })
                         await db.commit()
             except Exception as e:
                 logger.warning(f"Error during switchboard Sarvam promise extraction: {e}")
 
-        # Check if disconnect was authorized or requested by representative
+        # Check if call was already resolved in prior turns (refund commitment already received)
+        has_prior_resolution = False
+        prior_p_cnt = (await db.execute(
+            select(func.count(Promise.id)).where(Promise.case_id == call.case_id, Promise.user_confirmed == True)
+        )).scalar() or 0
+        if prior_p_cnt > 0 or promise_detected:
+            has_prior_resolution = True
+        else:
+            prev_u_res = await db.execute(
+                select(Utterance.raw_text).where(Utterance.call_id == call_id, Utterance.speaker_role == "agent")
+            )
+            for pu in prev_u_res.scalars().all():
+                pt = (pu or "").lower()
+                if any(w in pt for w in ["refund", "रिफंड", "credit", "क्रेडिट", "wapas", "वापस", "reverse", "पैसे"]) and any(w in pt for w in ["din", "दिन", "days", "hours", "ghante", "घंटे"]):
+                    has_prior_resolution = True
+                    break
+
+        # Check if disconnect was authorized, or if representative offered closing courtesies post-resolution
         lower_rep_check = text.lower()
         is_disconnect_authorized = any(w in lower_rep_check for w in [
             "call ko kaat sakte", "call disconnect kar", "hang up", "call cut", "kaat sakte hain",
@@ -477,6 +504,14 @@ async def send_call_message(
             "phone rakh sakte", "फ़ोन रख सकते", "फोन रख सकते", "disconnect kar dijiye", "disconnect kar sakte",
             "disconnect kar lijiye"
         ])
+
+        # If a resolution was already secured or detected, any closing courtesy from rep triggers clean disconnect
+        is_closing_courtesy = has_prior_resolution and any(w in lower_rep_check for w in [
+            "धन्यवाद", "thank you", "thanks", "दिन मंगलमय", "दिन शुभ", "शुभ दिन",
+            "ok", "okay", "bye", "alvida", "take care", "welcome", "जी"
+        ])
+        if is_closing_courtesy:
+            is_disconnect_authorized = True
 
         # Intelligent Dynamic Advocate AI reply based on provided intake info
         if payload.auto_advocate_reply:
@@ -507,19 +542,24 @@ async def send_call_message(
                                     "normalised_text": u.normalised_text,
                                 })
 
-                        # Generate intelligent context-aware reply using Sarvam LLM + Intake docket
-                        adv_result = await sarvam_extractor.generate_advocate_response(
-                            case_info=info,
-                            goal=goal_text,
-                            recent_turns=recent_db_turns,
-                            rep_latest_text=text,
-                            is_refusal=is_refusal,
-                            promise_detected=promise_detected,
-                        )
-                        if isinstance(adv_result, tuple):
-                            advocate_text, thought_process = adv_result
+                        # If call already reached resolution and representative is exchanging closing pleasantries, conclude gracefully
+                        if (is_closing_courtesy or is_disconnect_authorized) and not promise_detected:
+                            advocate_text = "Theek hai representative ji, sahayata ke liye bahut dhanyavaad. Main call disconnect kar rahi hoon. Aapka din shubh ho."
+                            thought_process = "Autonomous Strategy: Settlement confirmed in docket. Concluding call with gratitude."
                         else:
-                            advocate_text, thought_process = adv_result, "Autonomous Strategy: Applying domain regulations."
+                            # Generate intelligent context-aware reply using Sarvam LLM + Intake docket
+                            adv_result = await sarvam_extractor.generate_advocate_response(
+                                case_info=info,
+                                goal=goal_text,
+                                recent_turns=recent_db_turns,
+                                rep_latest_text=text,
+                                is_refusal=is_refusal,
+                                promise_detected=promise_detected,
+                            )
+                            if isinstance(adv_result, tuple):
+                                advocate_text, thought_process = adv_result
+                            else:
+                                advocate_text, thought_process = adv_result, "Autonomous Strategy: Applying domain regulations."
 
                         # If representative refused, dispatch an immediate statutory notice email to consumer
                         if is_refusal and case:
@@ -611,13 +651,13 @@ async def send_call_message(
                             "Scheduling automatic call conclusion after concluding turn."
                         )
                         async def auto_conclude_after_turn():
-                            # Allow time for Shivani's concluding utterance and TTS audio to play
-                            delay = 3.8 if promise_detected else 2.5
+                            # Natural delay for Shivani's confirmation/closing speech to finish playing
+                            delay = 2.0 if promise_detected else 1.4
                             await asyncio.sleep(delay)
                             try:
                                 end_reason = (
                                     "Autonomous Resolution: Settlement commitment confirmed by representative"
-                                    if promise_detected
+                                    if (promise_detected or has_prior_resolution)
                                     else "Autonomous Resolution: Call concluded per representative disconnect authorization"
                                 )
                                 await execute_call_end(call_id, reason=end_reason)
@@ -632,7 +672,7 @@ async def send_call_message(
             asyncio.create_task(advocate_reply())
         elif promise_detected or is_disconnect_authorized:
             async def direct_auto_conclude():
-                await asyncio.sleep(2.0)
+                await asyncio.sleep(1.5)
                 try:
                     await execute_call_end(
                         call_id,
@@ -704,28 +744,28 @@ async def execute_call_end(call_id: str, reason: Optional[str] = None) -> dict:
         if not call:
             return {"status": "error", "message": "Call not found"}
 
-        if call.status == "ended":
-            return {"status": "ended", "call_id": call_id}
-
         manager.cancel_task(call_id)
         _call_advocate_locks.pop(call_id, None)
         call.status = "ended"
         call.ended_at = datetime.now(timezone.utc)
 
-        # Auto-confirm any promises extracted on the call so they are locked into evidence and tracked by deadline worker
-        unconfirmed = await db.execute(
-            select(Promise).where(Promise.case_id == call.case_id, Promise.user_confirmed == False)
-        )
-        for p in unconfirmed.scalars().all():
-            p.user_confirmed = True
-            p.user_confirmation_timestamp = datetime.now(timezone.utc)
-            p.follow_up_allowed = True
-            if not p.due_at:
-                from app.services.deadline_worker import get_demo_now
-                p.due_at = get_demo_now() + timedelta(days=5)
-        await db.commit()
+        # 1. Auto-confirm any promises extracted on the call so they are locked into evidence and tracked by deadline worker
+        try:
+            unconfirmed = await db.execute(
+                select(Promise).where(Promise.case_id == call.case_id, Promise.user_confirmed == False)
+            )
+            for p in unconfirmed.scalars().all():
+                p.user_confirmed = True
+                p.user_confirmation_timestamp = datetime.now(timezone.utc)
+                p.follow_up_allowed = True
+                if not p.due_at:
+                    from app.services.deadline_worker import get_demo_now
+                    p.due_at = get_demo_now() + timedelta(days=3)
+            await db.commit()
+        except Exception as p_err:
+            logger.warning(f"Error auto-confirming promises: {p_err}")
 
-        # Determine whether a genuine commitment or resolution was logged
+        # 2. Determine whether a genuine commitment or resolution was logged
         from app.services.ledger import ledger
         confirmed_promises = await ledger.get_promises_for_case(db, call.case_id)
 
@@ -746,7 +786,7 @@ async def execute_call_end(call_id: str, reason: Optional[str] = None) -> dict:
             for u in all_utt_objects
         ]
 
-        # Dual Safety Net: If confirmed_promises is empty, check utterances for verbal refund commitments
+        # 3. Dual Safety Net: If confirmed_promises is empty, check utterances for verbal refund commitments
         if not confirmed_promises:
             rep_turns = [u for u in all_utt_objects if u.speaker_role == "agent"]
             for ru in rep_turns:
@@ -769,25 +809,28 @@ async def execute_call_end(call_id: str, reason: Optional[str] = None) -> dict:
                     d_m = re.search(r"((?:agle\s*|next\s*|अगले\s*)?(?:paanch|do|teen|chaar|ek|das|teen\s*se\s*chaar|[0-9]+(?:\s*(?:se|to|-)\s*[0-9]+)?|तीन|चार|पांच|पाँच|दो|सात|दस)\s*(?:din|दिन|days|hours|ghante|घंटे)(?:\s*(?:mein|me|में))?)", t_lower)
                     raw_phrase = d_m.group(1).strip() if d_m else "3 days"
                     parsed_dt = parse_date_phrase(raw_phrase) or (get_demo_now() + timedelta(days=3))
-                    fallback_p = Promise(
-                        id=str(uuid.uuid4()),
-                        case_id=call.case_id,
-                        source_utterance_id=ru.id,
-                        commitment_type="refund",
-                        amount=c_amt,
-                        raw_date_phrase=raw_phrase,
-                        due_at=parsed_dt,
-                        quoted_text=ru.raw_text or ru.normalised_text,
-                        user_confirmed=True,
-                        user_confirmation_timestamp=datetime.now(timezone.utc),
-                        follow_up_allowed=True,
-                        status="pending",
-                        confidence=0.95,
-                        summary=f"Refund of ₹{c_amt or ''} promised by representative within {raw_phrase}",
-                    )
-                    db.add(fallback_p)
-                    await db.commit()
-                    confirmed_promises = [fallback_p]
+                    try:
+                        fallback_p = Promise(
+                            id=str(uuid.uuid4()),
+                            case_id=call.case_id,
+                            source_utterance_id=ru.id,
+                            commitment_type="refund",
+                            amount=c_amt,
+                            raw_date_phrase=raw_phrase,
+                            due_at=parsed_dt,
+                            quoted_text=ru.raw_text or ru.normalised_text or "Refund promised",
+                            user_confirmed=True,
+                            user_confirmation_timestamp=datetime.now(timezone.utc),
+                            follow_up_allowed=True,
+                            status="pending",
+                            extraction_confidence=0.95,
+                            summary=f"Refund of ₹{c_amt or ''} promised by representative within {raw_phrase}",
+                        )
+                        db.add(fallback_p)
+                        await db.commit()
+                        confirmed_promises = [fallback_p]
+                    except Exception as fb_err:
+                        logger.error(f"Error persisting fallback promise: {fb_err}", exc_info=True)
                     break
 
         evaluation = await sarvam_extractor.evaluate_call_and_summarize(
@@ -797,6 +840,11 @@ async def execute_call_end(call_id: str, reason: Optional[str] = None) -> dict:
             confirmed_promises=confirmed_promises,
         )
 
+        # Update case status if resolution achieved
+        if evaluation.get("has_conclusion") and evaluation.get("status") == "RESOLVED_PROMISED" and case:
+            case.status = "resolved"
+            await db.commit()
+
         await manager.broadcast(call_id, {
             "type": "call_ended",
             "call_id": call_id,
@@ -804,6 +852,7 @@ async def execute_call_end(call_id: str, reason: Optional[str] = None) -> dict:
             "reason": reason or evaluation["outcome_title"],
             "status": evaluation["status"].lower(),
             "summary": evaluation["summary"],
+            "promises_count": len(confirmed_promises),
         })
 
         # Always dispatch post-call summary email with the AI Agent's autonomous determination
