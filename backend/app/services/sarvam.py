@@ -979,7 +979,10 @@ class SarvamExtractor:
         is_rep_greeting = bool(re.search(
             r"\b(how\s*(?:may|can)\s*i\s*(?:help|assist)|welcome\s*to|swagat|sahayata|madad|kya\s*(?:madad|sahayata)|how\s*to\s*help|hello\b|namaste\b|good\s*(?:morning|afternoon|evening)|hi\b|boliye\b|tell\s*me\b)",
             lower_rep
-        ))
+        )) or any(w in lower_rep for w in [
+            "हेलो", "नमस्ते", "नमस्कार", "हाँजी", "बोलिए", "सहायता", "मदद", "स्वागत", "कॉल की है", "कॉल करी है",
+            "kis regarding", "kya baat hai", "kis liye call", "kis baare mein", "kaise call", "bataiye"
+        ])
         if is_rep_greeting and has_introduced:
             if is_follow_up:
                 thought = (
@@ -1014,6 +1017,19 @@ class SarvamExtractor:
                     f"Thank you. I am calling regarding {consumer_name}'s {provider} {dispute_nature} for Rs {amt}. "
                     f"Could you please pull up account {id_val} so we can review this?"
                 )
+            return spoken, thought
+
+        # 6.5 Audibility / Connection Check (e.g. "Aap sun pa rahe hain?", "Can you hear me?", "Awaaz aa rahi hai?")
+        is_hear_check = any(w in lower_rep for w in [
+            "sun pa rahe", "awaaz aa rahi", "can you hear", "are you there", "am i audible",
+            "आवाज़ आ रही", "सुन पा रहे", "सुन रहे हो"
+        ])
+        if is_hear_check:
+            thought = f"Autonomous Strategy: Confirming line connectivity and reiterating docket {id_val}."
+            if is_hindi:
+                spoken = f"Ji representative ji, aapki awaaz bilkul saaf aa rahi hai. Kripya account {id_val} check karein."
+            else:
+                spoken = f"Yes representative, I can hear you clearly. Please pull up account {id_val}."
             return spoken, thought
 
         # 7. Corporate Evasion Tactics Confrontation (ONLY if representative is actively diverting/stalling)
@@ -1091,7 +1107,18 @@ class SarvamExtractor:
                 msg = data.get("choices", [{}])[0].get("message", {})
                 content = (msg.get("content") or "").strip()
                 clean_content = content.replace('"', '').replace('*', '').strip()
-                if clean_content and len(clean_content) > 10:
+                if clean_content and len(clean_content) > 5:
+                    # Anti-hallucination guard 0: AI Personal Assistant must never act like company support offering help
+                    if any(m in clean_content.lower() for m in [
+                        "kaise madad karoon", "kaise madad kar sakti", "kya sahayata kar sakti",
+                        "how can i help you", "how may i assist you", "how can i assist you",
+                        "bataiye kaise madad", "bataiye kya madad", "madad kar sakti hoon"
+                    ]):
+                        if is_hindi:
+                            clean_content = f"Ji representative ji, main {consumer_name} ke {provider} {dispute_nature} ke regarding baat kar rahi hoon. Disputed amount Rs {amt} hai. Kripya account {id_val} check karein."
+                        else:
+                            clean_content = f"I am calling regarding {consumer_name}'s {provider} dispute for Rs {amt}. Could you please check account {id_val}?"
+
                     # Anti-hallucination guard 1: False 'holding' hallucination
                     # If LLM said it is on hold ("hold par hoon", "holding"), but the representative
                     # did NOT explicitly ask to hold:

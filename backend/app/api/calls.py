@@ -158,6 +158,10 @@ async def start_call(payload: CallCreate, db: AsyncSession = Depends(get_db)):
     call_id = call.id
 
     if is_live:
+        # Pre-warm high-speed TTS cache in background for instant speech playback
+        from app.services.gnani_tts import tts_adapter
+        asyncio.create_task(tts_adapter.warm_up_common_phrases(case.approved_info))
+
         # Notify switchboard of new incoming call
         await manager.broadcast("switchboard", {
             "type": "incoming_call",
@@ -237,6 +241,10 @@ async def accept_call(
     })
     await db.commit()
 
+    if case:
+        from app.services.gnani_tts import tts_adapter
+        asyncio.create_task(tts_adapter.warm_up_common_phrases(case.approved_info))
+
     return {"ok": True, "call_id": call_id, "status": "active"}
 
 
@@ -297,7 +305,7 @@ async def send_call_message(
     if prev_utt and prev_utt.speaker_role == payload.speaker and prev_utt.raw_text.strip().lower() == text.lower():
         now_dt = datetime.now(timezone.utc)
         prev_dt = prev_utt.created_at
-        if prev_dt and (now_dt - prev_dt).total_seconds() < 0.8:
+        if prev_dt and (now_dt - prev_dt).total_seconds() < 0.4:
             logger.info(f"Deduplicated rapid duplicate utterance on call {call_id}: '{text}'")
             return {
                 "ok": True,
@@ -387,28 +395,17 @@ async def send_call_message(
             })
         else:
             try:
-                candidate = await sarvam_extractor.extract_promise(
-                    [{"speaker_role": "agent", "raw_text": text, "normalised_text": text}],
-                    current_turn={"speaker_role": "agent", "raw_text": text, "normalised_text": text},
-                )
+                lower_t = text.lower()
+                has_ref_sig = any(w in lower_t for w in [
+                    "refund", "रिफंड", "credit", "क्रेडिट", "wapas", "वापस", "पैसे", "reverse",
+                    "waiver", "waive", "callback", "call you back", "visit", "technician"
+                ])
+                candidate = None
 
-                # Inherit disputed amount from case docket if representative didn't restate the rupee amount
-                if candidate and not candidate.get("amount") and case:
-                    try:
-                        amt_val = (case.approved_info or {}).get("disputed_amount")
-                        if amt_val:
-                            clean_amt = re.sub(r"[^\d.]", "", str(amt_val))
-                            if clean_amt:
-                                candidate["amount"] = float(clean_amt)
-                    except Exception:
-                        pass
-
-                # Dual Safety Net: Direct pattern synthesis for refund commitments with turnaround timeline
-                if not candidate:
-                    lower_t = text.lower()
-                    has_ref_sig = any(w in lower_t for w in ["refund", "रिफंड", "credit", "क्रेडिट", "wapas", "वापस", "पैसे", "reverse"])
-                    has_time_sig = any(w in lower_t for w in ["din", "दिन", "days", "day", "hours", "ghante", "घंटे", "working", "kal", "कल"])
-                    if has_ref_sig and has_time_sig:
+                # Ultra-fast path: Only perform promise extraction if representative uttered commitment signals
+                if has_ref_sig:
+                    has_time_sig = any(w in lower_t for w in ["din", "दिन", "days", "day", "hours", "ghante", "घंटे", "working", "kal", "कल", "तीन", "चार", "पांच"])
+                    if has_time_sig:
                         raw_date = None
                         d_m = re.search(r"((?:agle\s*|next\s*|अगले\s*)?(?:paanch|do|teen|chaar|ek|das|teen\s*se\s*chaar|[0-9]+(?:\s*(?:se|to|-)\s*[0-9]+)?|तीन|चार|पांच|पाँच|दो|सात|दस)\s*(?:din|दिन|days|hours|ghante|घंटे)(?:\s*(?:mein|me|में))?)", lower_t)
                         if d_m:
@@ -433,6 +430,24 @@ async def send_call_message(
                             "confidence": 0.95,
                             "summary": f"Refund of ₹{c_amt or ''} to consumer account within {raw_date or '3 days'}",
                         }
+
+                    # If not matched by direct pattern, fallback to extract_promise
+                    if not candidate:
+                        candidate = await sarvam_extractor.extract_promise(
+                            [{"speaker_role": "agent", "raw_text": text, "normalised_text": text}],
+                            current_turn={"speaker_role": "agent", "raw_text": text, "normalised_text": text},
+                        )
+
+                # Inherit disputed amount from case docket if representative didn't restate the rupee amount
+                if candidate and not candidate.get("amount") and case:
+                    try:
+                        amt_val = (case.approved_info or {}).get("disputed_amount")
+                        if amt_val:
+                            clean_amt = re.sub(r"[^\d.]", "", str(amt_val))
+                            if clean_amt:
+                                candidate["amount"] = float(clean_amt)
+                    except Exception:
+                        pass
 
                 if candidate and candidate.get("summary"):
                     from app.services.ledger import ledger
@@ -544,9 +559,14 @@ async def send_call_message(
                             async_db.add(adv_utt)
                             await async_db.commit()
 
-                        # ── TEXT-FIRST FAST PATH ──────────────────────────────────────────
-                        # Broadcast the text reply immediately (< 200ms) so the UI shows
-                        # Shivani's response without waiting for TTS synthesis.
+                        # ── FAST DELIVERY PATH (Audio included immediately if cached in memory) ──
+                        from app.services.gnani_tts import tts_adapter
+                        import base64
+                        cached_bytes = tts_adapter.get_cached_audio(advocate_text)
+                        cached_b64 = base64.b64encode(cached_bytes).decode("utf-8") if cached_bytes else None
+
+                        # Broadcast the text reply immediately (< 50ms)
+                        # If audio was pre-cached, it arrives in the primary event for 0ms voice latency!
                         await manager.broadcast(call_id, {
                             "type": "utterance",
                             "data": {
@@ -555,28 +575,33 @@ async def send_call_message(
                                 "text": advocate_text,
                                 "thought_process": thought_process,
                                 "is_final": True,
-                                "latencyMs": 110,
-                                "audio_b64": None,  # Audio follows via audio_patch
+                                "latencyMs": 40 if cached_b64 else 95,
+                                "audio_b64": cached_b64,
                             },
                         })
 
-                    # ── BACKGROUND TTS (Executed OUTSIDE lock to maintain zero-latency responsiveness) ──
-                    # Synthesize audio and send as a secondary audio_patch event.
-                    # The UI plays it via the SequentialAudioQueue when it arrives.
-                    try:
-                        from app.services.gnani_tts import tts_adapter
-                        import base64
-                        adv_bytes = await tts_adapter.synthesise(advocate_text)
-                        adv_audio = base64.b64encode(adv_bytes).decode("utf-8")
-                        await manager.broadcast(call_id, {
-                            "type": "audio_patch",
-                            "utterance_id": adv_id,
-                            "text": advocate_text,
-                            "thought_process": thought_process,
-                            "audio_b64": adv_audio,
-                        })
-                    except Exception as e:
-                        logger.debug(f"Advocate TTS synthesis failed (text already delivered): {e}")
+                    # ── BACKGROUND TTS (Executed OUTSIDE lock if audio was not pre-cached) ──
+                    if not cached_b64:
+                        try:
+                            adv_bytes = await tts_adapter.synthesise(advocate_text)
+                            adv_audio = base64.b64encode(adv_bytes).decode("utf-8")
+                            await manager.broadcast(call_id, {
+                                "type": "audio_patch",
+                                "utterance_id": adv_id,
+                                "text": advocate_text,
+                                "thought_process": thought_process,
+                                "audio_b64": adv_audio,
+                            })
+                        except Exception as e:
+                            logger.warning(f"Advocate TTS synthesis failed ({e}). Dispatching fallback speech event.")
+                            await manager.broadcast(call_id, {
+                                "type": "audio_patch",
+                                "utterance_id": adv_id,
+                                "text": advocate_text,
+                                "thought_process": thought_process,
+                                "audio_b64": None,
+                                "fallback_speech": True,
+                            })
 
                     # ── AUTONOMOUS CALL TERMINATION ON CONFIRMED REFUND OR DISCONNECT AUTHORIZATION ──
                     if promise_detected or is_disconnect_authorized:

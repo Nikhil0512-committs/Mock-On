@@ -85,14 +85,23 @@ export function deduplicateConsecutivePhrases(text: string): string {
 }
 
 class SequentialAudioQueue {
-  private queue: string[] = [];
+  private queue: Array<{ type: "audio"; b64: string } | { type: "text"; text: string }> = [];
   public isPlaying = false;
   private currentAudio: HTMLAudioElement | null = null;
   private playTimeout: any = null;
   public onStateChange: ((playing: boolean) => void) | null = null;
 
   enqueue(audioB64: string) {
-    this.queue.push(audioB64);
+    if (!audioB64) return;
+    this.queue.push({ type: "audio", b64: audioB64 });
+    if (!this.isPlaying) {
+      this.playNext();
+    }
+  }
+
+  enqueueText(text: string) {
+    if (!text) return;
+    this.queue.push({ type: "text", text });
     if (!this.isPlaying) {
       this.playNext();
     }
@@ -110,6 +119,11 @@ class SequentialAudioQueue {
       } catch {}
       this.currentAudio = null;
     }
+    try {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    } catch {}
     this.queue = [];
     this.isPlaying = false;
     this.onStateChange?.(false);
@@ -128,41 +142,69 @@ class SequentialAudioQueue {
       return;
     }
 
-    const nextB64 = this.queue.shift();
-    if (!nextB64) {
+    const item = this.queue.shift();
+    if (!item) {
       this.playNext();
       return;
     }
 
-    try {
-      this.isPlaying = true;
-      this.onStateChange?.(true);
-      const audio = new Audio("data:audio/wav;base64," + nextB64);
-      this.currentAudio = audio;
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      if (this.playTimeout) {
+        clearTimeout(this.playTimeout);
+        this.playTimeout = null;
+      }
+      this.currentAudio = null;
+      this.playNext();
+    };
 
-      let finished = false;
-      const finish = () => {
-        if (finished) return;
-        finished = true;
-        if (this.playTimeout) {
-          clearTimeout(this.playTimeout);
-          this.playTimeout = null;
+    this.isPlaying = true;
+    this.onStateChange?.(true);
+
+    if (item.type === "text") {
+      try {
+        if (typeof window !== "undefined" && window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+          const utt = new SpeechSynthesisUtterance(item.text);
+          utt.rate = 1.05;
+          utt.pitch = 1.1;
+          const voices = window.speechSynthesis.getVoices();
+          const v = voices.find(
+            (vox) =>
+              (vox.lang.includes("IN") || vox.lang.includes("hi")) &&
+              (vox.name.toLowerCase().includes("female") ||
+               vox.name.toLowerCase().includes("neerja") ||
+               vox.name.toLowerCase().includes("swara") ||
+               vox.name.toLowerCase().includes("aditi") ||
+               vox.name.toLowerCase().includes("veena") ||
+               vox.name.toLowerCase().includes("google"))
+          ) || voices.find((vox) => vox.lang.includes("hi") || vox.lang.includes("IN"));
+          if (v) utt.voice = v;
+          utt.onend = finish;
+          utt.onerror = finish;
+          this.playTimeout = setTimeout(finish, 8000);
+          window.speechSynthesis.speak(utt);
+          return;
         }
-        this.playNext();
-      };
+      } catch {}
+      finish();
+      return;
+    }
 
+    try {
+      const audio = new Audio("data:audio/wav;base64," + item.b64);
+      this.currentAudio = audio;
       audio.onended = finish;
       audio.onerror = finish;
-
-      // 8-second safety watchdog so queue never freezes playback state
       this.playTimeout = setTimeout(finish, 8000);
-
       audio.play().catch((err) => {
         console.warn("Audio playback interrupted or blocked:", err);
         finish();
       });
     } catch {
-      this.playNext();
+      finish();
     }
   }
 }
@@ -196,6 +238,7 @@ export default function SwitchboardPage() {
   const lastSentTextRef = useRef<string>("");
   const lastSentTimeRef = useRef<number>(0);
   const sendingRef = useRef(false);
+  const pendingSendRef = useRef<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const transcriptBottomRef = useRef<HTMLDivElement>(null);
 
@@ -532,6 +575,8 @@ export default function SwitchboardPage() {
 
             if (msg.audio_b64) {
               switchboardAudioQueue.enqueue(msg.audio_b64 as string);
+            } else if (msg.fallback_speech && (msg.text || patchText)) {
+              switchboardAudioQueue.enqueueText((msg.text || patchText) as string);
             }
           } else if (msg.type === "promise_proposed") {
             const prop = msg.proposal?.promise_data || msg.proposal;
@@ -613,17 +658,20 @@ export default function SwitchboardPage() {
     const raw = (customText || speechBufferRef.current).trim();
     if (!raw || !callItem) return;
 
-    // Prevent re-entry while a send is already in flight
-    if (sendingRef.current) return;
+    // If a network send is already in flight, buffer the latest message so speech is never dropped!
+    if (sendingRef.current) {
+      pendingSendRef.current = raw;
+      return;
+    }
 
     const textToSend = deduplicateConsecutivePhrases(raw);
     if (!textToSend) return;
 
-    // Production-level deduplication: prevent identical submissions within 0.8 second
+    // Production-level deduplication: prevent accidental identical submissions within 0.4 second
     const now = Date.now();
     if (
       textToSend.toLowerCase() === lastSentTextRef.current.toLowerCase() &&
-      now - lastSentTimeRef.current < 800
+      now - lastSentTimeRef.current < 400
     ) {
       return;
     }
@@ -670,6 +718,12 @@ export default function SwitchboardPage() {
     } finally {
       sendingRef.current = false;
       setSending(false);
+      // Flush any pending message that arrived while sending was in flight
+      if (pendingSendRef.current) {
+        const nextMsg = pendingSendRef.current;
+        pendingSendRef.current = null;
+        setTimeout(() => handleSendMessage(nextMsg), 60);
+      }
     }
   };
 

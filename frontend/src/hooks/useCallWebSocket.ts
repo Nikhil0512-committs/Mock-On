@@ -8,10 +8,11 @@ import { useStore } from "../store";
 import type { WSEvent, LiveUtterance } from "../types";
 
 class SequentialAudioQueue {
-  private queue: string[] = [];
+  private queue: Array<{ type: "audio"; b64: string } | { type: "text"; text: string }> = [];
   private isPlaying = false;
   private currentAudio: HTMLAudioElement | null = null;
   private isMuted = false;
+  private playTimeout: ReturnType<typeof setTimeout> | null = null;
 
   setMuted(muted: boolean) {
     this.isMuted = muted;
@@ -21,14 +22,26 @@ class SequentialAudioQueue {
   }
 
   enqueue(audioB64: string) {
-    if (this.isMuted) return;
-    this.queue.push(audioB64);
+    if (this.isMuted || !audioB64) return;
+    this.queue.push({ type: "audio", b64: audioB64 });
+    if (!this.isPlaying) {
+      this.playNext();
+    }
+  }
+
+  enqueueText(text: string) {
+    if (this.isMuted || !text) return;
+    this.queue.push({ type: "text", text });
     if (!this.isPlaying) {
       this.playNext();
     }
   }
 
   clear() {
+    if (this.playTimeout) {
+      clearTimeout(this.playTimeout);
+      this.playTimeout = null;
+    }
     if (this.currentAudio) {
       try {
         this.currentAudio.pause();
@@ -36,41 +49,92 @@ class SequentialAudioQueue {
       } catch {}
       this.currentAudio = null;
     }
+    try {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    } catch {}
     this.queue = [];
     this.isPlaying = false;
   }
 
   private playNext() {
+    if (this.playTimeout) {
+      clearTimeout(this.playTimeout);
+      this.playTimeout = null;
+    }
+
     if (this.queue.length === 0 || this.isMuted) {
       this.isPlaying = false;
       this.currentAudio = null;
       return;
     }
 
-    const nextB64 = this.queue.shift();
-    if (!nextB64) {
+    const item = this.queue.shift();
+    if (!item) {
       this.playNext();
       return;
     }
 
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      if (this.playTimeout) {
+        clearTimeout(this.playTimeout);
+        this.playTimeout = null;
+      }
+      this.currentAudio = null;
+      this.playNext();
+    };
+
+    this.isPlaying = true;
+
+    if (item.type === "text") {
+      // High-reliability Web Speech API fallback when TTS network is slow or unavailable
+      try {
+        if (typeof window !== "undefined" && window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+          const utt = new SpeechSynthesisUtterance(item.text);
+          utt.rate = 1.05;
+          utt.pitch = 1.1;
+          const voices = window.speechSynthesis.getVoices();
+          const v = voices.find(
+            (vox) =>
+              (vox.lang.includes("IN") || vox.lang.includes("hi")) &&
+              (vox.name.toLowerCase().includes("female") ||
+               vox.name.toLowerCase().includes("neerja") ||
+               vox.name.toLowerCase().includes("swara") ||
+               vox.name.toLowerCase().includes("aditi") ||
+               vox.name.toLowerCase().includes("veena") ||
+               vox.name.toLowerCase().includes("google"))
+          ) || voices.find((vox) => vox.lang.includes("hi") || vox.lang.includes("IN"));
+          if (v) utt.voice = v;
+          utt.onend = finish;
+          utt.onerror = finish;
+          this.playTimeout = setTimeout(finish, 8000);
+          window.speechSynthesis.speak(utt);
+          return;
+        }
+      } catch {}
+      finish();
+      return;
+    }
+
+    // Audio element playback for high-fidelity Gnani Timbre TTS
     try {
-      this.isPlaying = true;
-      const audio = new Audio("data:audio/wav;base64," + nextB64);
+      const audio = new Audio("data:audio/wav;base64," + item.b64);
       this.currentAudio = audio;
-
-      audio.onended = () => {
-        this.playNext();
-      };
-
-      audio.onerror = () => {
-        this.playNext();
-      };
-
-      audio.play().catch(() => {
-        this.playNext();
+      audio.onended = finish;
+      audio.onerror = finish;
+      // 8-second safety watchdog so playback queue never gets stuck
+      this.playTimeout = setTimeout(finish, 8000);
+      audio.play().catch((err) => {
+        console.warn("Audio element play error, continuing queue:", err);
+        finish();
       });
     } catch {
-      this.playNext();
+      finish();
     }
   }
 }
@@ -226,6 +290,8 @@ export function useCallWebSocket(callId: string | null) {
           const audioPatchB64 = (rawEv.audio_b64 as string) || ((event as any).audio_b64 as string);
           if (audioPatchB64 && !isAudioMuted) {
             audioQueue.enqueue(audioPatchB64);
+          } else if ((rawEv.fallback_speech || !audioPatchB64) && rawEv.text && !isAudioMuted) {
+            audioQueue.enqueueText(rawEv.text as string);
           }
           break;
         }
