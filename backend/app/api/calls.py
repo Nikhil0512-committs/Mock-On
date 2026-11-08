@@ -1,6 +1,7 @@
 """Calls API — POST /calls, GET /calls/{id}, Live Admin Switchboard dispatch & messaging."""
 import asyncio
 import logging
+import re
 import uuid
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
@@ -407,7 +408,7 @@ async def send_call_message(
                     has_time_sig = any(w in lower_t for w in ["din", "दिन", "days", "day", "hours", "ghante", "घंटे", "working", "kal", "कल", "तीन", "चार", "पांच"])
                     if has_time_sig:
                         raw_date = None
-                        d_m = re.search(r"((?:agle\s*|next\s*|अगले\s*)?(?:paanch|do|teen|chaar|ek|das|teen\s*se\s*chaar|[0-9]+(?:\s*(?:se|to|-)\s*[0-9]+)?|तीन|चार|पांच|पाँच|दो|सात|दस)\s*(?:din|दिन|days|hours|ghante|घंटे)(?:\s*(?:mein|me|में))?)", lower_t)
+                        d_m = re.search(r"((?:agle\s*|next\s*|अगले\s*)?(?:paanch|do|teen|chaar|ek|das|teen\s*se\s*chaar|do\s*se\s*teen|[0-9]+(?:\s*(?:se|to|-)\s*[0-9]+)?|तीन\s*से\s*चार|दो\s*से\s*तीन|तीन|चार|पांच|पाँच|दो|सात|दस)\s*(?:din|दिन|days|hours|ghante|घंटे)(?:\s*(?:mein|me|में))?)", lower_t)
                         if d_m:
                             raw_date = d_m.group(1).strip()
                         c_amt = None
@@ -788,28 +789,28 @@ async def execute_call_end(call_id: str, reason: Optional[str] = None) -> dict:
 
         # 3. Dual Safety Net: If confirmed_promises is empty, check utterances for verbal refund commitments
         if not confirmed_promises:
-            rep_turns = [u for u in all_utt_objects if u.speaker_role == "agent"]
-            for ru in rep_turns:
-                t_lower = (ru.raw_text or ru.normalised_text or "").lower()
-                has_ref = any(w in t_lower for w in ["refund", "रिफंड", "credit", "क्रेडिट", "wapas", "वापस", "reverse", "पैसे"])
-                has_time = any(w in t_lower for w in ["din", "दिन", "days", "day", "hours", "ghante", "घंटे", "working", "business", "kal", "कल", "तीन", "चार", "पांच"])
-                if has_ref and has_time:
-                    c_amt = None
-                    if case:
-                        try:
-                            amt_val = (case.approved_info or {}).get("disputed_amount")
-                            if amt_val:
-                                clean_num = re.sub(r"[^\d.]", "", str(amt_val))
-                                if clean_num:
-                                    c_amt = float(clean_num)
-                        except Exception:
-                            pass
-                    from app.services.deadline_worker import get_demo_now
-                    from app.services.validators import parse_date_phrase
-                    d_m = re.search(r"((?:agle\s*|next\s*|अगले\s*)?(?:paanch|do|teen|chaar|ek|das|teen\s*se\s*chaar|[0-9]+(?:\s*(?:se|to|-)\s*[0-9]+)?|तीन|चार|पांच|पाँच|दो|सात|दस)\s*(?:din|दिन|days|hours|ghante|घंटे)(?:\s*(?:mein|me|में))?)", t_lower)
-                    raw_phrase = d_m.group(1).strip() if d_m else "3 days"
-                    parsed_dt = parse_date_phrase(raw_phrase) or (get_demo_now() + timedelta(days=3))
-                    try:
+            try:
+                rep_turns = [u for u in all_utt_objects if u.speaker_role == "agent"]
+                for ru in rep_turns:
+                    t_lower = (ru.raw_text or ru.normalised_text or "").lower()
+                    has_ref = any(w in t_lower for w in ["refund", "रिफंड", "credit", "क्रेडिट", "wapas", "वापस", "reverse", "पैसे"])
+                    has_time = any(w in t_lower for w in ["din", "दिन", "days", "day", "hours", "ghante", "घंटे", "working", "business", "kal", "कल", "तीन", "चार", "पांच"])
+                    if has_ref and has_time:
+                        c_amt = None
+                        if case:
+                            try:
+                                amt_val = (case.approved_info or {}).get("disputed_amount")
+                                if amt_val:
+                                    clean_num = re.sub(r"[^\d.]", "", str(amt_val))
+                                    if clean_num:
+                                        c_amt = float(clean_num)
+                            except Exception:
+                                pass
+                        from app.services.deadline_worker import get_demo_now
+                        from app.services.validators import parse_date_phrase
+                        d_m = re.search(r"((?:agle\s*|next\s*|अगले\s*)?(?:paanch|do|teen|chaar|ek|das|teen\s*se\s*chaar|do\s*se\s*teen|[0-9]+(?:\s*(?:se|to|-)\s*[0-9]+)?|तीन\s*से\s*चार|दो\s*से\s*तीन|तीन|चार|पांच|पाँच|दो|सात|दस)\s*(?:din|दिन|days|hours|ghante|घंटे)(?:\s*(?:mein|me|में))?)", t_lower)
+                        raw_phrase = d_m.group(1).strip() if d_m else "3 days"
+                        parsed_dt = parse_date_phrase(raw_phrase) or (get_demo_now() + timedelta(days=3))
                         fallback_p = Promise(
                             id=str(uuid.uuid4()),
                             case_id=call.case_id,
@@ -829,9 +830,9 @@ async def execute_call_end(call_id: str, reason: Optional[str] = None) -> dict:
                         db.add(fallback_p)
                         await db.commit()
                         confirmed_promises = [fallback_p]
-                    except Exception as fb_err:
-                        logger.error(f"Error persisting fallback promise: {fb_err}", exc_info=True)
-                    break
+                        break
+            except Exception as fb_err:
+                logger.error(f"Error in fallback promise extraction/persistence: {fb_err}", exc_info=True)
 
         evaluation = await sarvam_extractor.evaluate_call_and_summarize(
             case_info=info,

@@ -1,4 +1,5 @@
 """Cases API — POST /cases, GET /cases/{id}"""
+import logging
 import secrets
 from datetime import datetime, timezone
 from typing import Optional
@@ -15,6 +16,7 @@ from app.schemas.case import CaseCreate, CaseRead, CaseUpdate
 from app.services.auth import get_optional_current_user
 
 router = APIRouter(prefix="/cases", tags=["cases"])
+logger = logging.getLogger(__name__)
 
 
 class EnhanceGrievancePayload(BaseModel):

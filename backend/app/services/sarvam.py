@@ -1126,8 +1126,8 @@ class SarvamExtractor:
                         "hold kijiye", "hold karein", "line par rahein", "line par baniye",
                         "please hold", "hold on", "one moment", "give me a moment", "ek minute rukiye", "दो मिनट रुकिए"
                     ])
-                    if any(hp in clean_content.lower() for hp in ["hold par hoon", "hold kar rahi hoon", "holding on the line", "holding on", "hold par"]) and not is_genuine_hold_request:
-                        has_refund_talk = any(rw in lower_rep for rw in ["refund", "रिफंड", "credit", "क्रेडिट", "wapas", "वापस", "din", "दिन", "days", "hours"])
+                    if any(hp in clean_content.lower() for hp in ["hold par hoon", "hold kar rahi hoon", "holding on the line", "holding on", "hold par", "hold pe hoon", "hold pe", "main hold par", "main hold pe"]) and not is_genuine_hold_request:
+                        has_refund_talk = any(rw in lower_rep for rw in ["refund", "रिफंड", "credit", "क्रेडिट", "wapas", "वापस", "din", "दिन", "days", "hours", "तीन", "चार", "पांच"])
                         if has_refund_talk:
                             if is_hindi:
                                 clean_content = f"Theek hai, main confirm kar rahi hoon: yeh refund process ho jayega. Dhanyawaad."
