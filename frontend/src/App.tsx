@@ -18,6 +18,7 @@ import LedgerPage from "./pages/LedgerPage";
 import DemoPage from "./pages/DemoPage";
 import FamilyPage from "./pages/FamilyPage";
 import SwitchboardPage from "./pages/SwitchboardPage";
+import ResolutionPage from "./pages/ResolutionPage";
 import AuthModal from "./components/AuthModal";
 import MyDisputesDrawer from "./components/MyDisputesDrawer";
 import LanguageSelector from "./components/LanguageSelector";
@@ -403,6 +404,7 @@ export default function App() {
             <Route path="/switchboard" element={<SwitchboardPage />} />
             <Route path="/ledger" element={<LedgerPage />} />
             <Route path="/demo" element={<DemoPage />} />
+            <Route path="/resolution/respond" element={<ResolutionPage />} />
             <Route path="/family/:token" element={<FamilyPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

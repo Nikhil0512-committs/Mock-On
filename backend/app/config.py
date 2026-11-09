@@ -87,15 +87,17 @@ class Settings(BaseSettings):
 
     @property
     def public_frontend_url(self) -> str:
-        if self.app_env == "development" and "localhost" in self.frontend_url:
-            return self.frontend_url
-        return self.frontend_url or "https://mock-on.vercel.app"
+        """Public internet URL for emails and notifications — never returns localhost."""
+        if self.frontend_url and not any(loc in self.frontend_url for loc in ["localhost", "127.0.0.1"]):
+            return self.frontend_url.rstrip("/")
+        return "https://mock-on.vercel.app"
 
     @property
     def public_backend_url(self) -> str:
-        if self.app_env == "development" and "localhost" in self.backend_url:
-            return self.backend_url
-        return self.backend_url or "https://mock-on-backend.onrender.com"
+        """Public internet URL for emails and notifications — never returns localhost."""
+        if self.backend_url and not any(loc in self.backend_url for loc in ["localhost", "127.0.0.1"]):
+            return self.backend_url.rstrip("/")
+        return "https://mock-on-backend.onrender.com"
 
     # Twilio Live Telephony Bridge
     twilio_account_sid: str = Field(default="")

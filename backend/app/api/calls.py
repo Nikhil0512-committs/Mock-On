@@ -142,7 +142,46 @@ async def get_switchboard_pending(db: AsyncSession = Depends(get_db)):
         )
         .order_by(Call.created_at.desc())
     )
-    rows = (await db.execute(stmt)).all()
+    rows = list((await db.execute(stmt)).all())
+
+    # Ensure any cases in follow_up_active state have an active/ringing call in the switchboard queue
+    pending_followup_cases = (
+        await db.execute(
+            select(Case).where(
+                Case.status.in_(["follow_up_active", "overdue"])
+            )
+        )
+    ).scalars().all()
+
+    for fu_case in pending_followup_cases:
+        has_active = any(c.case_id == fu_case.id for c, _ in rows)
+        if not has_active:
+            # Check last ended call to prevent instant re-ringing within 45s
+            last_call_res = await db.execute(
+                select(Call)
+                .where(Call.case_id == fu_case.id, Call.scenario_id == "live_switchboard")
+                .order_by(Call.ended_at.desc().nullslast())
+                .limit(1)
+            )
+            last_call = last_call_res.scalar_one_or_none()
+            if last_call and last_call.ended_at and (now_utc - last_call.ended_at).total_seconds() < 45:
+                continue
+
+            new_call = Call(
+                case_id=fu_case.id,
+                scenario_id="live_switchboard",
+                status="ringing",
+                started_at=None,
+            )
+            db.add(new_call)
+            try:
+                await db.commit()
+                await db.refresh(new_call)
+                rows.insert(0, (new_call, fu_case))
+            except Exception as e:
+                logger.warning(f"Error auto-spawning follow-up switchboard call for case {fu_case.id}: {e}")
+                await db.rollback()
+
     results = []
     for call, case in rows:
         results.append({
