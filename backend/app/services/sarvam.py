@@ -488,15 +488,18 @@ class SarvamExtractor:
         id_type = case_info.get("identifier_type") or "Consumer Account No (CA)"
         id_val = case_info.get("identifier_value") or case_info.get("phone_number") or "CA-1029481029"
         amt = case_info.get("disputed_amount") or "8,500"
-        ticket = case_info.get("ticket_number") or "TKT-2026-78432"
+        ticket = case_info.get("ticket_number") or case_info.get("overdue_ticket") or "TKT-2026-78432"
         consumer_name = case_info.get("consumer_name") or case_info.get("full_name") or "Nikhil Sharma"
+        consumer_first_name = consumer_name.split()[0].strip()
         phone = case_info.get("phone_number") or case_info.get("registered_mobile") or "+91 91030 31412"
         email = case_info.get("contact_email") or case_info.get("user_email") or "nikhilsharma5122006@gmail.com"
         is_follow_up = bool(
             case_info.get("is_follow_up")
             or "OVERDUE" in (goal or "").upper()
             or "FOLLOW-UP" in (goal or "").upper()
+            or "FOLLOW UP" in (goal or "").upper()
         )
+        promised_timeline = case_info.get("promised_timeline") or "3 se 4 din"
 
         history_lines = []
         for t in recent_turns[-6:]:
@@ -574,10 +577,12 @@ class SarvamExtractor:
 
         if is_follow_up:
             system_instruction += (
-                f"\n\n5. URGENT OVERDUE FOLLOW-UP DIRECTIVE:\n"
-                f"- This is an ESCALATED FOLLOW-UP CALL for overdue Ticket #{ticket}.\n"
-                f"- On the previous call, {provider} agreed to refund Rs {amt} within the agreed SLA, but the deadline expired and consumer {consumer_name} confirmed NO refund was credited.\n"
-                f"- You are fighting firmly for {consumer_name}'s money. Under the Consumer Protection Act 2019 and statutory regulations, demand immediate refund reversal. Do NOT accept vague excuses or further delay without escalating to the Statutory Ombudsman / Appellate Authority."
+                f"\n\n9. URGENT OVERDUE FOLLOW-UP DIRECTIVE:\n"
+                f"- This is a FOLLOW-UP CALL for overdue Ticket #{ticket}.\n"
+                f"- On the previous call, {provider}'s support desk promised that the refund of Rs {amt} would be credited within {promised_timeline}.\n"
+                f"- That deadline has EXPIRED, and consumer {consumer_name} has confirmed that the refund has NOT been received.\n"
+                f"- Explicitly inform the representative that this is a follow-up call, that their team told us to wait for {promised_timeline}, and demand to know where our money is ('Hamare paise kahan hain?').\n"
+                f"- Under the Consumer Protection Act 2019, demand immediate credit reversal of Rs {amt} to account {id_val}. Do NOT accept vague excuses."
             )
 
         user_content = (
@@ -820,10 +825,20 @@ class SarvamExtractor:
             return spoken, thought
 
         # 4.3.1 Proxy Identity, Owner Consent & armour365™ Biometric Authorization
-        is_proxy_req = bool(re.search(
-            r"\b(consent|permission|authorized|authorization|authority|proxy|owner|mandate|approval|kyc|account\s*holder|are\s*you\s*(?:the\s*)?(?:account\s*holder|customer|nikhil)|aap\s*(?:hi|khud)\s*(?:nikhil|customer|consumer|account\s*holder)|aap\s*nikhil\s*(?:baat|ho|nahi)|nikhil\s*(?:se|ko)\s*(?:baat|phone)|account\s*holder\s*se\s*baat|unse\s*baat\s*karwao|unko\s*phone\s*do|third\s*party|permission\s*diya|permission\s*hai|consent\s*mila|consent\s*hai|owner\s*se|owner\s*ka\s*consent|got\s*(?:the\s*)?consent)\b",
-            lower_rep
-        )) or any(w in lower_rep for w in ["सहमति", "अनुमति", "कंसेंट", "परमिशन", "अधिकार", "मालिक", "निखिल से बात", "निखिल का कंसेंट", "ऑथराइजेशन", "कंज्यूमर से बात", "कंज्यूमर का कंसेंट"])
+        c_fn = consumer_first_name.lower()
+        proxy_pat = (
+            rf"\b(consent|permission|authorized|authorization|authority|proxy|owner|mandate|approval|kyc|account\s*holder|"
+            rf"are\s*you\s*(?:the\s*)?(?:account\s*holder|customer|{c_fn}|nikhil|aarti)|"
+            rf"aap\s*(?:hi|khud)\s*(?:{c_fn}|nikhil|aarti|customer|consumer|account\s*holder)|"
+            rf"aap\s*(?:{c_fn}|nikhil|aarti)\s*(?:baat|ho|nahi)|"
+            rf"(?:{c_fn}|nikhil|aarti)\s*(?:se|ko)\s*(?:baat|phone)|"
+            rf"account\s*holder\s*se\s*baat|unse\s*baat\s*karwao|unko\s*phone\s*do|third\s*party|"
+            rf"permission\s*diya|permission\s*hai|consent\s*mila|consent\s*hai|owner\s*se|owner\s*ka\s*consent|got\s*(?:the\s*)?consent)\b"
+        )
+        is_proxy_req = bool(re.search(proxy_pat, lower_rep)) or any(w in lower_rep for w in [
+            "सहमति", "अनुमति", "कंसेंट", "परमिशन", "अधिकार", "मालिक",
+            f"{c_fn} से बात", f"{c_fn} का कंसेंट", "निखिल से बात", "आरती से बात", "ऑथराइजेशन", "कंज्यूमर से बात", "कंज्यूमर का कंसेंट"
+        ])
         if is_proxy_req:
             thought = f"Autonomous Strategy: Confirming explicit owner consent from {consumer_name} under IT Act 2000 Section 10A and armour365™ verified biometric authorization."
             if is_hindi:
@@ -907,16 +922,17 @@ class SarvamExtractor:
         ))
         if is_prob_req:
             if is_follow_up:
-                thought = f"Autonomous Strategy: Explaining overdue Ticket #{ticket} SLA breach and demanding immediate monetary restitution."
+                thought = f"Autonomous Strategy: Explaining overdue Ticket #{ticket} SLA breach and demanding money status."
                 if is_hindi:
                     spoken = (
-                        f"Mamla yeh hai ki unke overdue Ticket #{ticket} par aapki team ne Rs {amt} refund ka commitment diya tha, "
-                        f"par deadline nikalne ke baad bhi consumer ko refund nahi mila. Hum Consumer Protection Act ke tahat turant Rs {amt} ka reversal demand kar rahe hain."
+                        f"Mamla yeh hai ki yeh follow-up call hai. Pichli baar aapki team ne hume {promised_timeline} wait karne ko bola tha, "
+                        f"par deadline nikalne ke baad bhi {consumer_name} ko Rs {amt} ka refund nahi mila. "
+                        f"Hamare paise kahan hain aur kab credit honge, kripya check karke batayein."
                     )
                 else:
                     spoken = (
-                        f"On our prior call for Ticket #{ticket}, your company formally committed to refund Rs {amt}. "
-                        f"That deadline has passed and the funds were not credited. We demand immediate reversal of Rs {amt} under statutory consumer protection regulations."
+                        f"The issue is that this is a follow-up call for Ticket #{ticket}. On our last call, you told us to wait for {promised_timeline}, "
+                        f"yet consumer {consumer_name} has not received the Rs {amt} refund. Where is our money, and when will it be credited?"
                     )
                 return spoken, thought
             thought = f"Autonomous Strategy: Providing factual synopsis of {dispute_nature} based on docket."
@@ -933,9 +949,9 @@ class SarvamExtractor:
             if is_follow_up:
                 thought = f"Autonomous Strategy: Demanding direct refund on overdue Ticket #{ticket} without further stalling."
                 if is_hindi:
-                    spoken = f"Consumer {consumer_name} ko overdue Ticket #{ticket} par unka pura Rs {amt} ka refund turant chahiye, bina kisi further delay ke."
+                    spoken = f"Consumer {consumer_name} ko overdue Ticket #{ticket} par unka pura Rs {amt} ka refund turant chahiye. Hum pehle hi {promised_timeline} wait kar chuke hain, hamare paise turant reverse hone chahiye."
                 else:
-                    spoken = f"We demand immediate credit processing of Rs {amt} on Ticket #{ticket} to the original payment source without further delays."
+                    spoken = f"Consumer {consumer_name} requires immediate credit of the Rs {amt} refund on Ticket #{ticket}. We already waited {promised_timeline} as requested, where is our money?"
                 return spoken, thought
             thought = f"Autonomous Strategy: Demanding direct monetary restitution of Rs {amt}."
             spoken = default_res_hindi if is_hindi else default_res_en
@@ -951,15 +967,18 @@ class SarvamExtractor:
                 if is_hindi:
                     spoken = (
                         f"Namaste, main {consumer_name} ki personal assistant Shivani bol rahi hoon. "
-                        f"Yeh call overdue Ticket #{ticket} ke follow-up ke regarding hai. "
-                        f"Rs {amt} ka refund deadline nikalne ke baad bhi receive nahi hua hai. "
-                        f"Hum Hindi ya English kisi mein bhi baat kar sakte hain."
+                        f"Yeh ek follow-up call hai unke Ticket #{ticket} ke regarding. "
+                        f"Pichli call par aapki team ne hume {promised_timeline} wait karne ko bola tha, "
+                        f"lekin deadline beetne ke baad bhi Rs {amt} ka refund receive nahi hua hai. "
+                        f"Consumer ke paise kahan hain aur yeh refund kab tak credit hoga?"
                     )
                 else:
                     spoken = (
-                        f"Hello, I am Shivani, {consumer_name}'s personal assistant. "
-                        f"I am calling to follow up on overdue Ticket #{ticket}. "
-                        f"The promised refund of Rs {amt} was not received past the agreed deadline, and we require immediate settlement."
+                        f"Hello, I am Shivani, personal assistant to {consumer_name}. "
+                        f"This is a follow-up call regarding Ticket #{ticket}. "
+                        f"On our prior call, your team told us to wait for {promised_timeline} for the Rs {amt} refund, "
+                        f"but the deadline has passed and the funds were not received. "
+                        f"Where is our money, and when will this refund be credited?"
                     )
             elif is_hindi:
                 spoken = (
@@ -987,19 +1006,19 @@ class SarvamExtractor:
             if is_follow_up:
                 thought = (
                     f"Autonomous Strategy: Representative offered assistance on overdue follow-up call. "
-                    f"Stating overdue status of Ticket #{ticket} and demanding immediate credit reversal of Rs {amt}."
+                    f"Explaining that we were told to wait {promised_timeline} and asking where the money is."
                 )
                 if is_hindi:
                     spoken = (
-                        f"Ji representative ji, main {consumer_name} ke overdue Ticket #{ticket} ke regarding baat kar rahi hoon. "
-                        f"Aapki company ne Rs {amt} refund ka commitment diya tha jo ki overdue ho chuka hai. "
-                        f"Consumer Protection Act ke mutabik kripya account number {id_val} par turant iska credit reversal confirm karein."
+                        f"Ji representative ji, yeh {consumer_name} ke Ticket #{ticket} par follow-up call hai. "
+                        f"Pichli call par aapne hume {promised_timeline} wait karne ko kaha tha, lekin abhi tak Rs {amt} nahi aaye. "
+                        f"Kripya batayein hamare paise kahan atke hain aur account {id_val} par turant refund process karein."
                     )
                 else:
                     spoken = (
-                        f"Thank you representative. I am following up on {consumer_name}'s overdue Ticket #{ticket} for Rs {amt}. "
-                        f"Your team committed to this refund but the deadline expired. Under statutory consumer protection regulations, "
-                        f"we require immediate confirmation of this credit to account {id_val}."
+                        f"Thank you representative. I am following up on {consumer_name}'s Ticket #{ticket}. "
+                        f"Your team told us to wait for {promised_timeline}, but the Rs {amt} refund has not been received. "
+                        f"Could you please tell us where our money is and confirm the credit to account {id_val}?"
                     )
                 return spoken, thought
 
@@ -1150,10 +1169,13 @@ class SarvamExtractor:
                         clean_content = re.sub(r"\bchahta\s+hoon\b", "chahti hoon", clean_content, flags=re.IGNORECASE)
 
                     # Guard: If LLM re-introduced itself despite prior intro, replace with factual pivot
+                    c_low = consumer_name.lower()
+                    c_fn_low = consumer_first_name.lower()
                     if has_introduced and any(p in clean_content.lower() for p in [
                         "personal assistant", "ai personal assistant", "hum hindi ya english",
                         "speak in english", "calling regarding help", "dispute ke regarding",
-                        "calling regarding nikhil", "main nikhil sharma ka"
+                        f"calling regarding {c_fn_low}", f"main {c_fn_low} ka", f"main {c_fn_low} ki",
+                        "calling regarding nikhil", "main nikhil sharma ka", "calling regarding aarti", "main aarti"
                     ]):
                         if is_hindi:
                             clean_content = f"Ji representative ji, main {consumer_name} ke Rs {amt} dispute ke regarding baat kar rahi hoon. Kripya account {id_val} check karein."

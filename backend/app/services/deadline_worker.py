@@ -251,11 +251,12 @@ class DeadlineWorker:
         id_val = info.get("identifier_value") or info.get("phone_number") or f"REF-{str(promise.case_id)[:6].upper()}"
         id_label = info.get("identifier_type") or "Reference"
         consumer_name = info.get("consumer_name") or info.get("full_name") or "Consumer"
+        promised_timeline = promise.raw_date_phrase or "3 se 4 din"
 
         overdue_goal = (
-            f"URGENT OVERDUE FOLLOW-UP: The agreed deadline for Ticket #{ticket_no} has passed without resolution. "
+            f"URGENT OVERDUE FOLLOW-UP: The agreed deadline of {promised_timeline} for Ticket #{ticket_no} has passed without resolution. "
             f"Promised refund of {amt_str} for {provider} ({id_label}: {id_val}) has NOT been received by consumer {consumer_name}. "
-            f"Demand immediate settlement, ledger confirmation, or transfer to Nodal/Appellate desk."
+            f"You told us to wait for {promised_timeline}, where is our money? Demand immediate settlement, ledger confirmation, or transfer to Nodal/Appellate desk."
         )
 
         if case:
@@ -265,6 +266,8 @@ class DeadlineWorker:
             info["overdue_ticket"] = ticket_no
             info["disputed_amount"] = amt_str
             info["identifier_value"] = id_val
+            info["promised_timeline"] = promised_timeline
+            info["consumer_name"] = consumer_name
             case.approved_info = info
 
         # Open real follow-up call in database for Switchboard

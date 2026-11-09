@@ -527,11 +527,17 @@ export default function IntakePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const effectiveUserName =
+    currentUser?.full_name?.trim() ||
+    (currentUser?.email
+      ? currentUser.email.split("@")[0].replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+      : "Nikhil Sharma");
+
   const handlePlayVoiceToken = () => {
     setIsPlayingVoiceToken(true);
     try {
       const activeProvider = provider.trim() || selectedDomain.defaultProvider;
-      const text = `I, Nikhil Sharma, authorize Mock-On AI Personal Assistant Shivani to represent my grievance for ${activeProvider} under IT Act 2000 Section 10A and armour365 biometric consent.`;
+      const text = `I, ${effectiveUserName}, authorize Mock-On AI Personal Assistant Shivani to represent my grievance for ${activeProvider} under IT Act 2000 Section 10A and armour365 biometric consent.`;
       if ("speechSynthesis" in window) {
         window.speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(text);
@@ -663,7 +669,12 @@ export default function IntakePage() {
     const effectiveSupportNumber = supportNumber.trim() || scrapedHelpline.number;
     const effectiveAmount = amount.trim() || selectedDomain.defaultAmount;
     const effectivePhone = phoneNumber.trim() || "+91 91030 31412";
-    const effectiveEmail = email.trim() || currentUser?.email || "nikhilsharma5122006@gmail.com";
+    const effectiveEmail =
+      email.trim() ||
+      currentUser?.email ||
+      (effectiveUserName.toLowerCase().includes("aarti")
+        ? "aarti@mockon.ai"
+        : "nikhilsharma5122006@gmail.com");
     const effectiveIdentifier = identifierValue.trim() || effectivePhone || selectedDomain.defaultIdentifier;
     const effectiveGoal = goal.trim() || selectedDomain.defaultGoal;
 
@@ -690,7 +701,7 @@ export default function IntakePage() {
           biometric_consent: biometricConsent,
           biometric_framework: "armour365_it_act_10a",
           voice_proxy_authorized: true,
-          consumer_name: currentUser?.full_name || "Nikhil Sharma",
+          consumer_name: effectiveUserName,
         },
         follow_up_consent: consent,
       });
@@ -1181,7 +1192,7 @@ export default function IntakePage() {
             </div>
 
             <div className="p-2.5 rounded-xl bg-black/40 border border-white/[0.06] text-[11px] text-white/70 italic leading-relaxed">
-              &ldquo;I, {currentUser?.full_name || "Nikhil Sharma"}, authorize Mock-On AI Personal Assistant Shivani to represent my grievance for {provider.trim() || selectedDomain.defaultProvider} under IT Act 2000 Section 10A and armour365™ biometric consent.&rdquo;
+              &ldquo;I, {effectiveUserName}, authorize Mock-On AI Personal Assistant Shivani to represent my grievance for {provider.trim() || selectedDomain.defaultProvider} under IT Act 2000 Section 10A and armour365™ biometric consent.&rdquo;
             </div>
 
             <label className="flex items-center gap-2.5 cursor-pointer text-xs text-white/80 hover:text-white select-none pt-0.5">

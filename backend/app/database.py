@@ -131,7 +131,7 @@ async def init_db() -> None:
             else:
                 admin_user.role = "admin"
 
-            # Check consumer
+            # Check consumer Nikhil
             res_consumer = await session.execute(select(User).where(User.email == "nikhil@mockon.ai"))
             consumer_user = res_consumer.scalar_one_or_none()
             if not consumer_user:
@@ -144,6 +144,20 @@ async def init_db() -> None:
                     role="consumer",
                 )
                 session.add(consumer_user)
+
+            # Check consumer Aarti
+            res_aarti = await session.execute(select(User).where(User.email == "aarti@mockon.ai"))
+            aarti_user = res_aarti.scalar_one_or_none()
+            if not aarti_user:
+                aarti_user = User(
+                    id=str(uuid.uuid4()),
+                    email="aarti@mockon.ai",
+                    hashed_password=hash_password("password123"),
+                    full_name="Aarti Sharma",
+                    phone_number="+91 98765 43210",
+                    role="consumer",
+                )
+                session.add(aarti_user)
 
             await session.commit()
     except Exception as e:

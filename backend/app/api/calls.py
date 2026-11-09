@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db, AsyncSessionLocal
-from app.models import Call, Case, Utterance, Promise
+from app.models import Call, Case, Utterance, Promise, User
 from app.schemas.call import CallCreate, CallRead
 from app.services.orchestrator import CallOrchestrator
 from app.services.sarvam import sarvam_extractor
@@ -24,6 +24,53 @@ from app.ws.call_socket import manager
 
 router = APIRouter(prefix="/calls", tags=["calls"])
 logger = logging.getLogger(__name__)
+
+
+async def resolve_case_consumer_name(db: AsyncSession, case: Optional[Case]) -> str:
+    """
+    Dynamically resolve consumer name from the user account or case docket.
+    If the account username is 'nikhil', Shivani represents Nikhil.
+    If the account username is 'aarti', Shivani represents Aarti.
+    Supports any username or full_name from the user account.
+    """
+    if not case:
+        return "Nikhil Sharma"
+
+    user = None
+    if case.user_id:
+        res = await db.execute(select(User).where(User.id == case.user_id))
+        user = res.scalar_one_or_none()
+    if not user and case.user_email:
+        res = await db.execute(select(User).where(func.lower(User.email) == case.user_email.lower()))
+        user = res.scalar_one_or_none()
+    if not user and case.owner_id and "@" in case.owner_id:
+        res = await db.execute(select(User).where(func.lower(User.email) == case.owner_id.lower()))
+        user = res.scalar_one_or_none()
+
+    if user:
+        if user.full_name and user.full_name.strip():
+            return user.full_name.strip()
+        if user.email:
+            username = user.email.split("@")[0].replace(".", " ").replace("_", " ").strip().title()
+            if username:
+                return username
+
+    info = case.approved_info or {}
+    c_name = info.get("consumer_name") or info.get("full_name")
+    if c_name and c_name.strip() and c_name.strip().lower() not in ["consumer", "user", "admin"]:
+        return c_name.strip()
+
+    if case.user_email and "@" in case.user_email:
+        username = case.user_email.split("@")[0].replace(".", " ").replace("_", " ").strip().title()
+        if username and username.lower() not in ["consumer", "user", "admin", "test"]:
+            return username
+
+    if case.owner_id and "@" in case.owner_id:
+        username = case.owner_id.split("@")[0].replace(".", " ").replace("_", " ").strip().title()
+        if username and username.lower() not in ["consumer", "user", "admin", "test"]:
+            return username
+
+    return "Nikhil Sharma"
 
 
 def deduplicate_phrase_repetitions(text: str) -> str:
@@ -244,7 +291,10 @@ async def accept_call(
 
     if case:
         from app.services.gnani_tts import tts_adapter
-        asyncio.create_task(tts_adapter.warm_up_common_phrases(case.approved_info))
+        consumer_name = await resolve_case_consumer_name(db, case)
+        info_to_warm = dict(case.approved_info or {})
+        info_to_warm["consumer_name"] = consumer_name
+        asyncio.create_task(tts_adapter.warm_up_common_phrases(info_to_warm))
 
     return {"ok": True, "call_id": call_id, "status": "active"}
 
@@ -530,6 +580,35 @@ async def send_call_message(
                         # Pull previous turns from database for conversational context under lock
                         recent_db_turns = []
                         async with AsyncSessionLocal() as async_db:
+                            # 1. Dynamically resolve consumer name from account (Nikhil / Aarti / logged-in user)
+                            consumer_name = await resolve_case_consumer_name(async_db, case)
+                            info["consumer_name"] = consumer_name
+
+                            # 2. Check if this call is an escalated follow-up call
+                            is_case_follow_up = bool(
+                                info.get("is_follow_up")
+                                or (case and case.status in ["follow_up_active", "overdue"])
+                                or "OVERDUE" in goal_text.upper()
+                                or "FOLLOW-UP" in goal_text.upper()
+                                or "FOLLOW UP" in goal_text.upper()
+                            )
+                            if is_case_follow_up and case:
+                                info["is_follow_up"] = True
+                                if not info.get("promised_timeline"):
+                                    prior_p_res = await async_db.execute(
+                                        select(Promise)
+                                        .where(Promise.case_id == case.id)
+                                        .order_by(Promise.created_at.desc())
+                                        .limit(1)
+                                    )
+                                    prior_p = prior_p_res.scalar_one_or_none()
+                                    if prior_p:
+                                        info["promised_timeline"] = prior_p.raw_date_phrase or "3 se 4 din"
+                                        info["promised_amount"] = str(prior_p.amount) if prior_p.amount else amt
+                                        info["promised_quote"] = prior_p.quoted_text
+                                    else:
+                                        info["promised_timeline"] = "3 se 4 din"
+
                             t_res = await async_db.execute(
                                 select(Utterance)
                                 .where(Utterance.call_id == call_id)
@@ -772,7 +851,9 @@ async def execute_call_end(call_id: str, reason: Optional[str] = None) -> dict:
 
         c_res = await db.execute(select(Case).where(Case.id == call.case_id))
         case = c_res.scalar_one_or_none()
-        info = case.approved_info if case else {}
+        info = dict(case.approved_info or {}) if case else {}
+        consumer_name = await resolve_case_consumer_name(db, case)
+        info["consumer_name"] = consumer_name
         provider = info.get("service_provider") or "Customer Care"
 
         # Pull all call utterances to let our female AI Personal Agent (Shivani) autonomously evaluate the call

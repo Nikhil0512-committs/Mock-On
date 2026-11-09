@@ -380,11 +380,12 @@ async def handle_resolution_response(
             id_label = info.get("identifier_type") or "Consumer Account (CA)"
             id_val = info.get("identifier_value") or info.get("phone_number") or "CA-1029481029"
             id_disp = f"{id_label}: {id_val}"
+            promised_timeline = promise.raw_date_phrase or "3 se 4 din"
 
             overdue_goal = (
-                f"URGENT OVERDUE FOLLOW-UP: The agreed deadline for Ticket #{ticket_no} has passed without resolution. "
+                f"URGENT OVERDUE FOLLOW-UP: The agreed deadline of {promised_timeline} for Ticket #{ticket_no} has passed without resolution. "
                 f"Promised refund of {amount_str} for {provider} ({id_disp}) has NOT been received by consumer {consumer_name}. "
-                f"Demand immediate settlement, ledger confirmation, or transfer to Nodal/Appellate desk."
+                f"You told us to wait for {promised_timeline}, where is our money? Demand immediate settlement, ledger confirmation, or transfer to Nodal/Appellate desk."
             )
             if case:
                 case.goal = overdue_goal
@@ -394,6 +395,8 @@ async def handle_resolution_response(
                 info["overdue_ticket"] = ticket_no
                 info["disputed_amount"] = amount_str
                 info["identifier_value"] = id_val
+                info["promised_timeline"] = promised_timeline
+                info["consumer_name"] = consumer_name
                 case.approved_info = info
 
             # Create an automated follow-up call dialing company switchboard
