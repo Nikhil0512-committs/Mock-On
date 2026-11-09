@@ -408,6 +408,7 @@ export default function LedgerPage() {
   const [legalNoticeCaseId, setLegalNoticeCaseId] = useState<string | null>(null);
   const [resendingEmail, setResendingEmail] = useState(false);
   const [resendStatus, setResendStatus] = useState<string | null>(null);
+  const [sendingCheckinEmail, setSendingCheckinEmail] = useState(false);
 
   const handleResendEmail = async () => {
     if (!activeCase) return;
@@ -424,6 +425,25 @@ export default function LedgerPage() {
       setResendStatus("Failed to send email.");
     } finally {
       setResendingEmail(false);
+      setTimeout(() => setResendStatus(null), 5000);
+    }
+  };
+
+  const handleSendCheckinEmail = async () => {
+    if (!activeCase) return;
+    setSendingCheckinEmail(true);
+    setResendStatus(null);
+    try {
+      const res = await casesApi.sendCheckin(activeCase.id);
+      if (res.ok) {
+        setResendStatus(`1-Click check-in email dispatched to ${res.emails?.join(", ") || activeCase.user_email || "your registered email"}`);
+      } else {
+        setResendStatus("Failed to send check-in email.");
+      }
+    } catch {
+      setResendStatus("Failed to send check-in email.");
+    } finally {
+      setSendingCheckinEmail(false);
       setTimeout(() => setResendStatus(null), 5000);
     }
   };
@@ -830,14 +850,25 @@ export default function LedgerPage() {
                     Summary email synced to <strong className="text-white/80 font-mono">{email}</strong>
                   </span>
                 </div>
-                <button
-                  onClick={handleResendEmail}
-                  disabled={resendingEmail}
-                  className="text-xs text-brand-400 hover:text-brand-300 transition-colors flex items-center gap-1.5"
-                >
-                  <RefreshCw className={`w-3 h-3 ${resendingEmail ? "animate-spin" : ""}`} />
-                  <span>{resendingEmail ? "Sending..." : "Resend Email"}</span>
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleSendCheckinEmail}
+                    disabled={sendingCheckinEmail}
+                    className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors flex items-center gap-1.5"
+                    title="Send 1-Click Yes/No refund check-in email now"
+                  >
+                    <Mail className={`w-3 h-3 ${sendingCheckinEmail ? "animate-spin" : ""}`} />
+                    <span>{sendingCheckinEmail ? "Sending Check-in..." : "Send Check-in Email"}</span>
+                  </button>
+                  <button
+                    onClick={handleResendEmail}
+                    disabled={resendingEmail}
+                    className="text-xs text-brand-400 hover:text-brand-300 transition-colors flex items-center gap-1.5"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${resendingEmail ? "animate-spin" : ""}`} />
+                    <span>{resendingEmail ? "Sending..." : "Resend Email"}</span>
+                  </button>
+                </div>
               </div>
 
               {resendStatus && (

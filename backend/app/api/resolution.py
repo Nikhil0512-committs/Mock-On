@@ -326,14 +326,21 @@ async def handle_resolution_response(
                 await db.rollback()
 
             # Non-blocking async dispatch of confirmation email
-            if user_email:
+            target_recv_emails = []
+            if user_email and "@" in user_email and not any(d in user_email.lower() for d in ["@mockon.ai", "@example.com", "@test.com", "@mock.com"]):
+                target_recv_emails.append(user_email)
+            if settings.smtp_user and settings.smtp_user not in target_recv_emails:
+                target_recv_emails.append(settings.smtp_user)
+
+            for e in target_recv_emails:
                 asyncio.create_task(
                     email_service.send_resolution_update(
-                        to_email=user_email,
+                        to_email=e,
                         case_id=promise.case_id,
                         provider=provider,
                         action="received",
                         ticket_number=ticket_no,
+                        force=True,
                     )
                 )
 
@@ -435,19 +442,26 @@ async def handle_resolution_response(
                 logger.warning(f"Failed to broadcast follow-up call to switchboard: {b_err}")
 
             # Non-blocking async dispatch of escalation and dispatch emails
-            if user_email:
+            target_not_recv_emails = []
+            if user_email and "@" in user_email and not any(d in user_email.lower() for d in ["@mockon.ai", "@example.com", "@test.com", "@mock.com"]):
+                target_not_recv_emails.append(user_email)
+            if settings.smtp_user and settings.smtp_user not in target_not_recv_emails:
+                target_not_recv_emails.append(settings.smtp_user)
+
+            for e in target_not_recv_emails:
                 asyncio.create_task(
                     email_service.send_resolution_update(
-                        to_email=user_email,
+                        to_email=e,
                         case_id=promise.case_id,
                         provider=provider,
                         action="not_received",
                         ticket_number=ticket_no,
+                        force=True,
                     )
                 )
                 asyncio.create_task(
                     email_service.send_call_dispatched(
-                        to_email=user_email,
+                        to_email=e,
                         case_id=promise.case_id,
                         provider=provider,
                         identifier_label=id_label,

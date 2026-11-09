@@ -700,29 +700,6 @@ async def send_call_message(
                             },
                         })
 
-                    # ── BACKGROUND TTS (Executed OUTSIDE lock if audio was not pre-cached) ──
-                    if not cached_b64:
-                        try:
-                            adv_bytes = await tts_adapter.synthesise(advocate_text)
-                            adv_audio = base64.b64encode(adv_bytes).decode("utf-8")
-                            await manager.broadcast(call_id, {
-                                "type": "audio_patch",
-                                "utterance_id": adv_id,
-                                "text": advocate_text,
-                                "thought_process": thought_process,
-                                "audio_b64": adv_audio,
-                            })
-                        except Exception as e:
-                            logger.warning(f"Advocate TTS synthesis failed ({e}). Dispatching fallback speech event.")
-                            await manager.broadcast(call_id, {
-                                "type": "audio_patch",
-                                "utterance_id": adv_id,
-                                "text": advocate_text,
-                                "thought_process": thought_process,
-                                "audio_b64": None,
-                                "fallback_speech": True,
-                            })
-
                     # ── AUTONOMOUS CALL TERMINATION ON CONFIRMED REFUND OR DISCONNECT AUTHORIZATION ──
                     if promise_detected or is_disconnect_authorized:
                         logger.info(
@@ -731,8 +708,8 @@ async def send_call_message(
                             "Scheduling automatic call conclusion after concluding turn."
                         )
                         async def auto_conclude_after_turn():
-                            # Natural delay for Shivani's confirmation/closing speech to finish playing
-                            delay = 2.0 if promise_detected else 1.4
+                            # Natural delay for Shivani's confirmation/closing speech to finish playing in browser
+                            delay = 2.2 if promise_detected else 1.5
                             await asyncio.sleep(delay)
                             try:
                                 end_reason = (
@@ -746,6 +723,31 @@ async def send_call_message(
                                 logger.error(f"Error during autonomous call conclusion: {auto_end_err}", exc_info=True)
 
                         asyncio.create_task(auto_conclude_after_turn())
+
+                    # ── BACKGROUND TTS (Executed asynchronously so it does not block conclusion) ──
+                    if not cached_b64:
+                        async def synthesize_and_patch():
+                            try:
+                                adv_bytes = await tts_adapter.synthesise(advocate_text)
+                                adv_audio = base64.b64encode(adv_bytes).decode("utf-8")
+                                await manager.broadcast(call_id, {
+                                    "type": "audio_patch",
+                                    "utterance_id": adv_id,
+                                    "text": advocate_text,
+                                    "thought_process": thought_process,
+                                    "audio_b64": adv_audio,
+                                })
+                            except Exception as e:
+                                logger.warning(f"Advocate TTS synthesis failed ({e}). Dispatching fallback speech event.")
+                                await manager.broadcast(call_id, {
+                                    "type": "audio_patch",
+                                    "utterance_id": adv_id,
+                                    "text": advocate_text,
+                                    "thought_process": thought_process,
+                                    "audio_b64": None,
+                                    "fallback_speech": True,
+                                })
+                        asyncio.create_task(synthesize_and_patch())
                 except Exception as adv_err:
                     logger.error(f"Error generating advocate reply on call {call_id}: {adv_err}", exc_info=True)
 
@@ -927,11 +929,18 @@ async def execute_call_end(call_id: str, reason: Optional[str] = None) -> dict:
             case.status = "resolved"
             await db.commit()
 
+        # If a valid conclusion or refund commitment was reached, ALWAYS prioritize the resolution outcome title over any generic midway string
+        broadcast_reason = (
+            evaluation.get("outcome_title")
+            if (evaluation.get("has_conclusion") or len(confirmed_promises) > 0)
+            else (reason or evaluation.get("outcome_title") or "Call concluded")
+        )
+
         await manager.broadcast(call_id, {
             "type": "call_ended",
             "call_id": call_id,
             "has_conclusion": evaluation["has_conclusion"],
-            "reason": reason or evaluation["outcome_title"],
+            "reason": broadcast_reason,
             "status": evaluation["status"].lower(),
             "summary": evaluation["summary"],
             "promises_count": len(confirmed_promises),

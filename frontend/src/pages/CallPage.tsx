@@ -302,7 +302,11 @@ export default function CallPage() {
 
   const handleEndCall = async () => {
     if (activeCall) {
-      await callsApi.end(activeCall.id, { reason: "Call ended midway by consumer before resolution" }).catch(() => {});
+      const endReason =
+        isCallResolved || currentPromises.length > 0 || pendingProposals.length > 0
+          ? "Autonomous Resolution: Settlement commitment confirmed by representative"
+          : "Call ended midway by consumer before resolution";
+      await callsApi.end(activeCall.id, { reason: endReason }).catch(() => {});
     }
     navigate("/ledger");
   };

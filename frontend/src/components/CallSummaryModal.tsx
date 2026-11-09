@@ -44,6 +44,8 @@ export default function CallSummaryModal({
   const navigate = useNavigate();
   const [resending, setResending] = useState(false);
   const [resendStatus, setResendStatus] = useState<string | null>(null);
+  const [sendingCheckin, setSendingCheckin] = useState(false);
+  const [checkinStatus, setCheckinStatus] = useState<string | null>(null);
   const [showLegalModal, setShowLegalModal] = useState(false);
 
   if (!isOpen || !caseData) return null;
@@ -79,6 +81,24 @@ export default function CallSummaryModal({
     } finally {
       setResending(false);
       setTimeout(() => setResendStatus(null), 6000);
+    }
+  };
+
+  const handleSendCheckin = async () => {
+    setSendingCheckin(true);
+    setCheckinStatus(null);
+    try {
+      const res = await casesApi.sendCheckin(caseData.id);
+      if (res.ok) {
+        setCheckinStatus(`1-Click check-in email dispatched to ${res.emails?.join(", ") || email}`);
+      } else {
+        setCheckinStatus("Failed to send check-in email.");
+      }
+    } catch {
+      setCheckinStatus("Failed to send check-in email.");
+    } finally {
+      setSendingCheckin(false);
+      setTimeout(() => setCheckinStatus(null), 6000);
     }
   };
 
@@ -263,20 +283,33 @@ export default function CallSummaryModal({
                 </div>
               </div>
             </div>
-            <button
-              onClick={handleResend}
-              disabled={resending}
-              className="btn-ghost text-xs py-2 px-3.5 flex items-center gap-1.5 border border-indigo-500/40 text-indigo-200 hover:bg-indigo-500/20 whitespace-nowrap rounded-xl transition-all"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${resending ? "animate-spin" : ""}`} />
-              {resending ? "Dispatching..." : "Resend Email"}
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {isResolved && (
+                <button
+                  onClick={handleSendCheckin}
+                  disabled={sendingCheckin}
+                  className="btn-ghost text-xs py-2 px-3.5 flex items-center gap-1.5 border border-emerald-500/40 text-emerald-200 hover:bg-emerald-500/20 whitespace-nowrap rounded-xl transition-all"
+                  title="Send 1-Click Yes/No refund verification email immediately"
+                >
+                  <Mail className={`w-3.5 h-3.5 ${sendingCheckin ? "animate-spin" : ""}`} />
+                  {sendingCheckin ? "Sending..." : "Send 1-Click Check-in"}
+                </button>
+              )}
+              <button
+                onClick={handleResend}
+                disabled={resending}
+                className="btn-ghost text-xs py-2 px-3.5 flex items-center gap-1.5 border border-indigo-500/40 text-indigo-200 hover:bg-indigo-500/20 whitespace-nowrap rounded-xl transition-all"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${resending ? "animate-spin" : ""}`} />
+                {resending ? "Dispatching..." : "Resend Email"}
+              </button>
+            </div>
           </div>
 
-          {resendStatus && (
+          {(resendStatus || checkinStatus) && (
             <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs animate-fade-in flex items-center gap-2 font-medium">
               <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-              <span>{resendStatus}</span>
+              <span>{resendStatus || checkinStatus}</span>
             </div>
           )}
 

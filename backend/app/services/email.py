@@ -329,13 +329,15 @@ class EmailService:
         amount_str: str = "Disputed Refund",
         due_date_str: str = "5 days",
         domain: str = "telecom",
+        force: bool = False,
     ) -> bool:
         """
         Send 5-day deadline check-in email with 1-click Yes/No action buttons.
         User clicking Yes marks promise fulfilled.
         User clicking No triggers follow-up re-contact call & statutory escalation.
         """
-        if self._is_duplicate(f"checkin:{promise_id}", cooldown_seconds=86400):
+        dedup_key = f"checkin:{to_email}:{promise_id}"
+        if not force and self._is_duplicate(dedup_key, cooldown_seconds=60):
             return True
         subject = f"[Action Required] Did you receive your {amount_str} refund from {provider}?"
         

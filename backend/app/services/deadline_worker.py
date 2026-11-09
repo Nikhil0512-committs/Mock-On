@@ -109,15 +109,19 @@ class DeadlineWorker:
                         from app.services.email import email_service
                         c_res = await db.execute(select(Case).where(Case.id == p.case_id))
                         case = c_res.scalar_one_or_none()
-                        target_email = (
+                        target_emails = []
+                        raw_target = (
                             (case.user_email if case else None)
                             or (case.owner_id if case and "@" in (case.owner_id or "") else None)
                             or ((case.approved_info or {}).get("contact_email") if case else None)
                             or ((case.approved_info or {}).get("email") if case else None)
                         )
-                        if not target_email or "@" not in target_email or any(d in target_email.lower() for d in ["@mockon.ai", "@example.com", "@test.com", "@mock.com"]):
-                            target_email = settings.smtp_user
-                        if case and target_email:
+                        if raw_target and "@" in raw_target and not any(d in raw_target.lower() for d in ["@mockon.ai", "@example.com", "@test.com", "@mock.com"]):
+                            target_emails.append(raw_target)
+                        if settings.smtp_user and settings.smtp_user not in target_emails:
+                            target_emails.append(settings.smtp_user)
+
+                        if case and target_emails:
                             provider = case.approved_info.get("service_provider", "Customer Support") if case.approved_info else "Customer Support"
                             amt_val = p.amount or (case.approved_info.get("disputed_amount") if case.approved_info else None)
                             amt_str = f"₹{amt_val}" if amt_val else "agreed sum"
@@ -131,22 +135,28 @@ class DeadlineWorker:
                                 or getattr(p, "deadline_phrase", None)
                                 or "5 business days"
                             )
-                            sent_ok = await email_service.send_deadline_checkin(
-                                to_email=target_email,
-                                case_id=p.case_id,
-                                promise_id=p.id,
-                                provider=provider,
-                                ticket_number=ticket,
-                                amount_str=amt_str,
-                                due_date_str=phrase,
-                            )
-                            if sent_ok:
+                            any_sent = False
+                            for t_email in target_emails:
+                                sent_ok = await email_service.send_deadline_checkin(
+                                    to_email=t_email,
+                                    case_id=p.case_id,
+                                    promise_id=p.id,
+                                    provider=provider,
+                                    ticket_number=ticket,
+                                    amount_str=amt_str,
+                                    due_date_str=phrase,
+                                    force=True,
+                                )
+                                if sent_ok:
+                                    any_sent = True
+                                    logger.info(f"Deadline check-in email delivered to {t_email} for promise {p.id}")
+
+                            if any_sent:
                                 meta["checkin_email_sent"] = True
                                 meta["checkin_email_sent_at"] = curr_now.isoformat()
                                 p.metadata_ = meta
                                 from sqlalchemy.orm.attributes import flag_modified
                                 flag_modified(p, "metadata_")
-                                logger.info(f"Deadline check-in email delivered to {target_email} for promise {p.id}")
                     except Exception as mail_err:
                         logger.error(f"Failed to send deadline check-in email: {mail_err}")
 
@@ -160,7 +170,7 @@ class DeadlineWorker:
                             Job.status.in_(["pending", "claimed", "success"]),
                         )
                     )
-                    if not existing_job.scalar_one_or_none():
+                    if not existing_job.scalars().first():
                         await self.schedule_callback(db, p, run_at=curr_now)
                         await db.commit()
             elif due_utc - curr_now <= reminder_window and p.status == "pending":
@@ -296,16 +306,22 @@ class DeadlineWorker:
             logger.warning(f"Failed to broadcast follow-up call to switchboard: {b_err}")
 
         # Send dispatch notification email to user
-        target_dispatch_email = (
+        target_dispatch_emails = []
+        raw_dispatch = (
             (case.user_email if case else None)
             or (case.owner_id if case and "@" in (case.owner_id or "") else None)
             or ((case.approved_info or {}).get("contact_email") if case else None)
             or ((case.approved_info or {}).get("email") if case else None)
         )
-        if case and target_dispatch_email:
+        if raw_dispatch and "@" in raw_dispatch and not any(d in raw_dispatch.lower() for d in ["@mockon.ai", "@example.com", "@test.com", "@mock.com"]):
+            target_dispatch_emails.append(raw_dispatch)
+        if settings.smtp_user and settings.smtp_user not in target_dispatch_emails:
+            target_dispatch_emails.append(settings.smtp_user)
+
+        for d_email in target_dispatch_emails:
             try:
                 await email_service.send_call_dispatched(
-                    to_email=target_dispatch_email,
+                    to_email=d_email,
                     case_id=promise.case_id,
                     provider=provider,
                     identifier_label=id_label,
@@ -315,7 +331,7 @@ class DeadlineWorker:
                     goal=overdue_goal,
                 )
             except Exception as mail_err:
-                logger.warning(f"Failed to send follow-up dispatch email: {mail_err}")
+                logger.warning(f"Failed to send follow-up dispatch email to {d_email}: {mail_err}")
 
         return f"Follow-up call {followup_call.id} dispatched to switchboard at {datetime.now(timezone.utc).isoformat()}"
 

@@ -143,14 +143,17 @@ async def resend_summary(case_id: str, db: AsyncSession = Depends(get_db)):
     case = result.scalar_one_or_none()
     if not case:
         raise HTTPException(404, "Case not found")
-    target_email = (
+    target_emails = []
+    raw_email = (
         case.user_email
         or (case.owner_id if "@" in (case.owner_id or "") else None)
         or (case.approved_info or {}).get("contact_email")
         or (case.approved_info or {}).get("email")
     )
-    if not target_email or "@" not in target_email or any(d in target_email.lower() for d in ["@mockon.ai", "@example.com", "@test.com", "@mock.com"]):
-        target_email = settings.smtp_user
+    if raw_email and "@" in raw_email and not any(d in raw_email.lower() for d in ["@mockon.ai", "@example.com", "@test.com", "@mock.com"]):
+        target_emails.append(raw_email)
+    if settings.smtp_user and settings.smtp_user not in target_emails:
+        target_emails.append(settings.smtp_user)
 
     p_res = await db.execute(select(Promise).where(Promise.case_id == case.id))
     promises = p_res.scalars().all()
@@ -172,35 +175,99 @@ async def resend_summary(case_id: str, db: AsyncSession = Depends(get_db)):
             "deadline_phrase": p.raw_date_phrase or "in 5 business days",
         })
 
-    if not p_list:
-        # Inconclusive call notice
-        sent = await email_service.send_inconclusive_call_notice(
-            to_email=target_email,
+    sent_any = False
+    for target_email in target_emails:
+        if not p_list:
+            # Inconclusive call notice
+            sent = await email_service.send_inconclusive_call_notice(
+                to_email=target_email,
+                case_id=case.id,
+                provider=provider,
+                ticket_number=ticket,
+                amount_str=amt,
+                reason="Call ended midway before a resolution or refund commitment was confirmed.",
+                identifier_label=id_label,
+                identifier_val=id_val,
+                force=True,
+            )
+        else:
+            sent = await email_service.send_call_summary(
+                to_email=target_email,
+                case_id=case.id,
+                provider=provider,
+                phone_number=phone,
+                ticket_number=ticket,
+                amount_str=amt,
+                due_date_str="5 business days",
+                promises=p_list,
+                identifier_label=id_label,
+                identifier_val=id_val,
+                domain=domain,
+                force=True,
+            )
+        if sent:
+            sent_any = True
+    return {"ok": sent_any, "email": ", ".join(target_emails), "has_conclusion": bool(p_list)}
+
+
+@router.post("/{case_id}/send-checkin", response_model=dict)
+async def send_case_checkin(case_id: str, db: AsyncSession = Depends(get_db)):
+    """Explicitly trigger and dispatch the 1-click deadline check-in email to the user."""
+    import uuid
+    from app.models.promise import Promise
+    from app.services.email import email_service
+
+    result = await db.execute(select(Case).where(Case.id == case_id))
+    case = result.scalar_one_or_none()
+    if not case:
+        raise HTTPException(404, "Case not found")
+
+    target_emails = []
+    raw_email = (
+        case.user_email
+        or (case.owner_id if "@" in (case.owner_id or "") else None)
+        or (case.approved_info or {}).get("contact_email")
+        or (case.approved_info or {}).get("email")
+    )
+    if raw_email and "@" in raw_email and not any(d in raw_email.lower() for d in ["@mockon.ai", "@example.com", "@test.com", "@mock.com"]):
+        target_emails.append(raw_email)
+    if settings.smtp_user and settings.smtp_user not in target_emails:
+        target_emails.append(settings.smtp_user)
+
+    p_res = await db.execute(select(Promise).where(Promise.case_id == case.id).order_by(Promise.created_at.desc()))
+    promises = p_res.scalars().all()
+    p = promises[0] if promises else None
+
+    info = case.approved_info or {}
+    provider = info.get("service_provider") or "Customer Support"
+    domain = (info.get("domain") or "telecom").lower()
+    amt_val = (p.amount if p else None) or info.get("disputed_amount", "1000")
+    amt_str = f"₹{amt_val}"
+    ticket = (
+        getattr(p, "ticket_number", None)
+        or info.get("ticket_number")
+        or f"TKT-{str(case.id)[:8].upper()}"
+    )
+    p_id = p.id if p else str(uuid.uuid4())
+    due_str = (p.raw_date_phrase if p else None) or "5 business days"
+
+    sent_any = False
+    for t_email in target_emails:
+        sent = await email_service.send_deadline_checkin(
+            to_email=t_email,
             case_id=case.id,
+            promise_id=p_id,
             provider=provider,
             ticket_number=ticket,
-            amount_str=amt,
-            reason="Call ended midway before a resolution or refund commitment was confirmed.",
-            identifier_label=id_label,
-            identifier_val=id_val,
-            force=True,
-        )
-    else:
-        sent = await email_service.send_call_summary(
-            to_email=target_email,
-            case_id=case.id,
-            provider=provider,
-            phone_number=phone,
-            ticket_number=ticket,
-            amount_str=amt,
-            due_date_str="5 business days",
-            promises=p_list,
-            identifier_label=id_label,
-            identifier_val=id_val,
+            amount_str=amt_str,
+            due_date_str=due_str,
             domain=domain,
             force=True,
         )
-    return {"ok": sent, "email": target_email, "has_conclusion": bool(p_list)}
+        if sent:
+            sent_any = True
+
+    return {"ok": sent_any, "emails": target_emails, "case_id": case_id}
 
 
 
