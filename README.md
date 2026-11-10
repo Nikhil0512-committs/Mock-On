@@ -10,6 +10,8 @@
 
 > **"You live your life. Mock-On negotiates, enforces deadlines, and protects your consumer rights."**
 
+> 📄 **Challenge Submission Document**: Read the comprehensive **[One-Page Solution Brief](docs/ONE_PAGE_SOLUTION.md)** (also available as **[Word Document (.docx)](docs/Mock-On_One_Page_Solution.docx)** and **[Executive PDF](docs/Mock-On_One_Page_Solution.pdf)**).
+
 Mock-On is a voice-first, multi-domain **Agentic AI Consumer Advocate**. It autonomously contacts corporate customer care helplines, navigates IVR phone trees, negotiates billing reversals in bilingual code-mixed Hindi & English, extracts legally binding promises into an auditable ledger, and automatically enforces statutory deadlines (TRAI, RBI, DGCA, IRDAI, CPA 2019).
 
 ---
